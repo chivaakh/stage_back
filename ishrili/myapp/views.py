@@ -1,6 +1,7 @@
-from django.shortcuts import render
 
 # Create your views here.
+from django.shortcuts import render
+from .serializers import ProduitDetailSerializer
 
 from rest_framework import viewsets
 from .models import (
@@ -36,9 +37,26 @@ class CategorieViewSet(viewsets.ModelViewSet):
     queryset = Categorie.objects.all()
     serializer_class = CategorieSerializer
 
-class ProduitViewSet(viewsets.ModelViewSet):
+
+
+from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.viewsets import ModelViewSet
+from .models import Produit
+from .serializers import ProduitSerializer, ProduitDetailSerializer
+
+class ProduitViewSet(ModelViewSet):
     queryset = Produit.objects.all()
-    serializer_class = ProduitSerializer
+
+    def get_permissions(self):
+        if self.action in ['list', 'retrieve']:
+            return [AllowAny()]
+        return [IsAuthenticated()]
+
+    def get_serializer_class(self):
+        if self.action in ['list', 'retrieve']:
+            return ProduitDetailSerializer
+        return ProduitSerializer
+
 
 class ImageProduitViewSet(viewsets.ModelViewSet):
     queryset = ImageProduit.objects.all()

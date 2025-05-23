@@ -21,4 +21,5 @@ router.register(r'journal-admin', JournalAdminViewSet)
 
 urlpatterns = [
     path('', include(router.urls)),
+    # path('api/', include(router.urls)),
 ]

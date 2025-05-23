@@ -6,6 +6,32 @@ from .models import (
     MouvementStock, JournalAdmin
 )
 
+class ProduitDetailSerializer(serializers.ModelSerializer):
+    image_principale = serializers.SerializerMethodField()
+    prix = serializers.SerializerMethodField()
+    prix_promo = serializers.SerializerMethodField()
+    en_stock = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Produit
+        fields = ['id', 'nom', 'description', 'image_principale', 'prix', 'prix_promo', 'en_stock']
+
+    def get_image_principale(self, obj):
+        image = obj.imageproduit_set.filter(est_principale=True).first()
+        return image.url_image if image else None
+
+    def get_prix(self, obj):
+        spec = obj.specificationproduit_set.filter(est_defaut=True).first()
+        return spec.prix if spec else None
+
+    def get_prix_promo(self, obj):
+        spec = obj.specificationproduit_set.filter(est_defaut=True).first()
+        return spec.prix_promo if spec and spec.prix_promo else None
+
+    def get_en_stock(self, obj):
+        spec = obj.specificationproduit_set.filter(est_defaut=True).first()
+        return spec.quantite_stock > 0 if spec else False
+
 
 class ImageUtilisateurSerializer(serializers.ModelSerializer):
     class Meta:
