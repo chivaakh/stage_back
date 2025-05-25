@@ -56,10 +56,9 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     
 ]
-# CORS config - autorise localhost:3000 uniquement
+# CORS config - autorise localhost:5173 uniquement
 CORS_ALLOWED_ORIGINS = [
-    "http://localhost:3000",
-    "http://127.0.0.1:3000",
+    "http://localhost:5173",
 ]
 
 # Optionnel : si besoin de cookies, sessions cross-origin
