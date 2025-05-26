@@ -1,12 +1,10 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-from . import views
+from .views import ProduitViewSet
 
 router = DefaultRouter()
-# Tu peux décommenter les ViewSet si besoin
-# router.register(r'utilisateurs', views.UtilisateurViewSet)
+router.register(r'produits', ProduitViewSet, basename='produit')
 
 urlpatterns = [
-    path('test/', views.test_connection, name='test'),  # 👈 Ici est ta route API
     path('', include(router.urls)),
 ]

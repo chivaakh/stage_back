@@ -1,15 +1,19 @@
+from rest_framework import viewsets
+from rest_framework.permissions import IsAuthenticated
+from .models import Produit
+from .serializers import ProduitSerializer
 
-# Create your views here.
-# from django.shortcuts import render
-# from .serializers import ProduitDetailSerializer
-from rest_framework.response import Response
-from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import AllowAny
+class ProduitViewSet(viewsets.ModelViewSet):
+    queryset = Produit.objects.all()
+    serializer_class = ProduitSerializer
+    permission_classes = []
+    
+    def perform_create(self, serializer):
+        # Temporaire : associer au premier commerçant trouvé
+        from .models import DetailsCommercant
+        commercant = DetailsCommercant.objects.first()
+        serializer.save(commercant=commercant)
 
-@api_view(['GET'])
-@permission_classes([AllowAny])  # 👈 autoriser tout le monde
-def test_connection(request):
-    return Response({'message': 'Connexion React-Django réussie !', 'status': 'ok'})
 
 # from rest_framework import viewsets
 # from .models import (

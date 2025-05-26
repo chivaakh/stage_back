@@ -1,3 +1,39 @@
+from rest_framework import serializers
+from .models import Produit
+
+from .models import Produit
+from rest_framework import serializers
+
+class ProduitSerializer(serializers.ModelSerializer):
+    commercant = serializers.PrimaryKeyRelatedField(read_only=True)
+
+    class Meta:
+        model = Produit
+        fields = '__all__'
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 # from rest_framework import serializers
 # from .models import (
 #     Utilisateur, ImageUtilisateur, DetailsClient, DetailsCommercant,
