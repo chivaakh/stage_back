@@ -1,6 +1,7 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from .views import *
+from .import views
 
 router = DefaultRouter()
 router.register(r'utilisateurs', UtilisateurViewSet)
@@ -21,4 +22,5 @@ router.register(r'journal-admin', JournalAdminViewSet)
 
 urlpatterns = [
     path('', include(router.urls)),
+    path('test/', views.test_api, name='test_api'),
 ]
