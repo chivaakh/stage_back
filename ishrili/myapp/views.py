@@ -1,108 +1,176 @@
-from rest_framework import viewsets
-from rest_framework.permissions import IsAuthenticated
-from .models import Produit
-from .serializers import ProduitSerializer
+# myapp/views.py - VERSION COMPLÈTE avec tous les ViewSets
+
+from rest_framework import viewsets, status
+from rest_framework.decorators import action
+from rest_framework.response import Response
+from django.db import transaction
+from .models import Produit, ImageProduit, SpecificationProduit
+from .serializers import ProduitSerializer, ImageProduitSerializer, SpecificationProduitSerializer
+import logging
+
+logger = logging.getLogger(__name__)
 
 class ProduitViewSet(viewsets.ModelViewSet):
     queryset = Produit.objects.all()
     serializer_class = ProduitSerializer
     permission_classes = []
-    
-    def perform_create(self, serializer):
-        # Temporaire : associer au premier commerçant trouvé
-        from .models import DetailsCommercant
-        commercant = DetailsCommercant.objects.first()
-        serializer.save(commercant=commercant)
+
+    def get_queryset(self):
+        """Optimiser les requêtes avec prefetch"""
+        return Produit.objects.prefetch_related(
+            'imageproduit_set', 'specificationproduit_set'
+        ).select_related('commercant', 'categorie')
+
+    def create(self, request, *args, **kwargs):
+        """Créer un produit avec images et spécifications"""
+        logger.info(f"🔍 Données reçues pour création: {request.data}")
+        
+        try:
+            with transaction.atomic():
+                # 1. Extraire les données
+                produit_data = {
+                    'nom': request.data.get('nom'),
+                    'description': request.data.get('description'),
+                    'reference': request.data.get('reference'),
+                }
+                
+                images_data = request.data.get('images', [])
+                specifications_data = request.data.get('specifications', [])
+                
+                logger.info(f"📦 Produit: {produit_data}")
+                logger.info(f"🖼️ Images: {len(images_data)} images")
+                logger.info(f"📋 Spécifications: {len(specifications_data)} specs")
+                
+                # 2. Créer le produit de base
+                produit_serializer = ProduitSerializer(data=produit_data)
+                if produit_serializer.is_valid():
+                    produit = produit_serializer.save()
+                    logger.info(f"✅ Produit créé avec ID: {produit.id}")
+                    
+                    # 3. Ajouter les images
+                    images_creees = 0
+                    for i, image_data in enumerate(images_data):
+                        if image_data.get('url_image'):  # Vérifier que l'URL existe
+                            try:
+                                image_obj = ImageProduit.objects.create(
+                                    produit=produit,
+                                    url_image=image_data['url_image'],
+                                    est_principale=image_data.get('est_principale', False),
+                                    ordre=image_data.get('ordre', i)
+                                )
+                                images_creees += 1
+                                logger.info(f"✅ Image {i+1} créée: {image_obj.url_image}")
+                            except Exception as e:
+                                logger.error(f"❌ Erreur création image {i+1}: {str(e)}")
+                    
+                    logger.info(f"📸 Total images créées: {images_creees}")
+                    
+                    # 4. Ajouter les spécifications
+                    specs_creees = 0
+                    for spec_data in specifications_data:
+                        if spec_data.get('nom') and spec_data.get('prix'):  # Vérifier données minimales
+                            try:
+                                spec_obj = SpecificationProduit.objects.create(
+                                    produit=produit,
+                                    nom=spec_data['nom'],
+                                    description=spec_data.get('description', ''),
+                                    prix=float(spec_data['prix']),
+                                    prix_promo=float(spec_data['prix_promo']) if spec_data.get('prix_promo') else None,
+                                    quantite_stock=int(spec_data.get('quantite_stock', 0)),
+                                    est_defaut=spec_data.get('est_defaut', False),
+                                    reference_specification=spec_data.get('reference_specification', '')
+                                )
+                                specs_creees += 1
+                                logger.info(f"✅ Spécification créée: {spec_obj.nom}")
+                            except Exception as e:
+                                logger.error(f"❌ Erreur création spécification: {str(e)}")
+                    
+                    logger.info(f"📋 Total spécifications créées: {specs_creees}")
+                    
+                    # 5. Retourner le produit complet avec relations
+                    produit_complet = self.get_queryset().get(id=produit.id)
+                    return Response(
+                        ProduitSerializer(produit_complet).data, 
+                        status=status.HTTP_201_CREATED
+                    )
+                else:
+                    logger.error(f"❌ Erreurs validation produit: {produit_serializer.errors}")
+                    return Response(produit_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+                    
+        except Exception as e:
+            logger.error(f"❌ Erreur lors de la création complète: {str(e)}")
+            return Response(
+                {'error': f'Erreur serveur: {str(e)}'}, 
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+    @action(detail=True, methods=['post'])
+    def add_image(self, request, pk=None):
+        """Ajouter une image à un produit existant"""
+        produit = self.get_object()
+        
+        data = request.data.copy()
+        data['produit'] = produit.id
+        
+        serializer = ImageProduitSerializer(data=data)
+        if serializer.is_valid():
+            # Si c'est marqué comme principale, retirer le flag des autres
+            if data.get('est_principale', False):
+                ImageProduit.objects.filter(produit=produit, est_principale=True).update(est_principale=False)
+            
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    @action(detail=True, methods=['post'])
+    def add_specification(self, request, pk=None):
+        """Ajouter une spécification à un produit existant"""
+        produit = self.get_object()
+        
+        data = request.data.copy()
+        data['produit'] = produit.id
+        
+        serializer = SpecificationProduitSerializer(data=data)
+        if serializer.is_valid():
+            # Si c'est marqué comme défaut, retirer le flag des autres
+            if data.get('est_defaut', False):
+                SpecificationProduit.objects.filter(produit=produit, est_defaut=True).update(est_defaut=False)
+            
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    @action(detail=True, methods=['get'])
+    def images(self, request, pk=None):
+        """Récupérer toutes les images d'un produit"""
+        produit = self.get_object()
+        images = produit.imageproduit_set.all().order_by('ordre', '-est_principale')
+        serializer = ImageProduitSerializer(images, many=True)
+        return Response(serializer.data)
+
+    @action(detail=True, methods=['get'])
+    def specifications(self, request, pk=None):
+        """Récupérer toutes les spécifications d'un produit"""
+        produit = self.get_object()
+        specs = produit.specificationproduit_set.all().order_by('-est_defaut')
+        serializer = SpecificationProduitSerializer(specs, many=True)
+        return Response(serializer.data)
 
 
-# from rest_framework import viewsets
-# from .models import (
-#     Utilisateur, ImageUtilisateur, DetailsClient, DetailsCommercant,
-#     Categorie, Produit, ImageProduit, SpecificationProduit,
-#     Commande, DetailCommande, Avis, Panier, Favori,
-#     MouvementStock, JournalAdmin
-# )
-# from .serializers import (
-#     UtilisateurSerializer, ImageUtilisateurSerializer, DetailsClientSerializer, DetailsCommercantSerializer,
-#     CategorieSerializer, ProduitSerializer, ImageProduitSerializer, SpecificationProduitSerializer,
-#     CommandeSerializer, DetailCommandeSerializer, AvisSerializer, PanierSerializer, FavoriSerializer,
-#     MouvementStockSerializer, JournalAdminSerializer
-# )
+# ✅ AJOUT des ViewSets manquants
+class ImageProduitViewSet(viewsets.ModelViewSet):
+    queryset = ImageProduit.objects.all()
+    serializer_class = ImageProduitSerializer
+    permission_classes = []
 
-# class UtilisateurViewSet(viewsets.ModelViewSet):
-#     queryset = Utilisateur.objects.all()
-#     serializer_class = UtilisateurSerializer
-
-# class ImageUtilisateurViewSet(viewsets.ModelViewSet):
-#     queryset = ImageUtilisateur.objects.all()
-#     serializer_class = ImageUtilisateurSerializer
-
-# class DetailsClientViewSet(viewsets.ModelViewSet):
-#     queryset = DetailsClient.objects.all()
-#     serializer_class = DetailsClientSerializer
-
-# class DetailsCommercantViewSet(viewsets.ModelViewSet):
-#     queryset = DetailsCommercant.objects.all()
-#     serializer_class = DetailsCommercantSerializer
-
-# class CategorieViewSet(viewsets.ModelViewSet):
-#     queryset = Categorie.objects.all()
-#     serializer_class = CategorieSerializer
+    def get_queryset(self):
+        return ImageProduit.objects.select_related('produit').order_by('produit', 'ordre')
 
 
+class SpecificationProduitViewSet(viewsets.ModelViewSet):
+    queryset = SpecificationProduit.objects.all()
+    serializer_class = SpecificationProduitSerializer
+    permission_classes = []
 
-# from rest_framework.permissions import AllowAny, IsAuthenticated
-# from rest_framework.viewsets import ModelViewSet
-# from .models import Produit
-# from .serializers import ProduitSerializer, ProduitDetailSerializer
-
-# class ProduitViewSet(ModelViewSet):
-#     queryset = Produit.objects.all()
-
-#     def get_permissions(self):
-#         if self.action in ['list', 'retrieve']:
-#             return [AllowAny()]
-#         return [IsAuthenticated()]
-
-#     def get_serializer_class(self):
-#         if self.action in ['list', 'retrieve']:
-#             return ProduitDetailSerializer
-#         return ProduitSerializer
-
-
-# class ImageProduitViewSet(viewsets.ModelViewSet):
-#     queryset = ImageProduit.objects.all()
-#     serializer_class = ImageProduitSerializer
-
-# class SpecificationProduitViewSet(viewsets.ModelViewSet):
-#     queryset = SpecificationProduit.objects.all()
-#     serializer_class = SpecificationProduitSerializer
-
-# class CommandeViewSet(viewsets.ModelViewSet):
-#     queryset = Commande.objects.all()
-#     serializer_class = CommandeSerializer
-
-# class DetailCommandeViewSet(viewsets.ModelViewSet):
-#     queryset = DetailCommande.objects.all()
-#     serializer_class = DetailCommandeSerializer
-
-# class AvisViewSet(viewsets.ModelViewSet):
-#     queryset = Avis.objects.all()
-#     serializer_class = AvisSerializer
-
-# class PanierViewSet(viewsets.ModelViewSet):
-#     queryset = Panier.objects.all()
-#     serializer_class = PanierSerializer
-
-# class FavoriViewSet(viewsets.ModelViewSet):
-#     queryset = Favori.objects.all()
-#     serializer_class = FavoriSerializer
-
-# class MouvementStockViewSet(viewsets.ModelViewSet):
-#     queryset = MouvementStock.objects.all()
-#     serializer_class = MouvementStockSerializer
-
-# class JournalAdminViewSet(viewsets.ModelViewSet):
-#     queryset = JournalAdmin.objects.all()
-#     serializer_class = JournalAdminSerializer
-
+    def get_queryset(self):
+        return SpecificationProduit.objects.select_related('produit').order_by('produit', '-est_defaut')
