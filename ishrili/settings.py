@@ -42,6 +42,7 @@ INSTALLED_APPS = [
     'rest_framework.authtoken', # Authentification par token
     'corsheaders',              # Gestion CORS pour Flutter
     'drf_yasg',
+    
 ]
 
 MIDDLEWARE = [
@@ -53,7 +54,15 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    
 ]
+# CORS config - autorise localhost:5173 uniquement
+CORS_ALLOWED_ORIGINS = [
+    "http://localhost:5173",
+]
+
+# Optionnel : si besoin de cookies, sessions cross-origin
+CORS_ALLOW_CREDENTIALS = True
 
 ROOT_URLCONF = 'ishrili.urls'
 
@@ -77,7 +86,6 @@ REST_FRAMEWORK = {
 #     "http://127.0.0.1:8000",
 #     # Ajoutez ici les origines autorisées pour votre application mobile
 # ]
-# CORS_ALLOW_CREDENTIALS = True
 
 
 CORS_ALLOWED_ORIGINS = [
