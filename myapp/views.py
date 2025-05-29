@@ -7,8 +7,24 @@ from django.db import transaction
 from .models import Produit, ImageProduit, SpecificationProduit
 from .serializers import ProduitSerializer, ImageProduitSerializer, SpecificationProduitSerializer
 import logging
+import os
+from django.conf import settings
+from django.core.files.storage import default_storage
+from django.http import JsonResponse
+from django.views.decorators.csrf import csrf_exempt
+from django.utils.decorators import method_decorator
+from rest_framework.decorators import api_view
+from rest_framework.response import Response
+from rest_framework import status
+import uuid
 
 logger = logging.getLogger(__name__)
+from rest_framework import viewsets
+# from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import AllowAny
+from .models import Produit
+from .serializers import ProduitSerializer
+from . import serializers
 
 class ProduitViewSet(viewsets.ModelViewSet):
     queryset = Produit.objects.all()
@@ -155,8 +171,98 @@ class ProduitViewSet(viewsets.ModelViewSet):
         specs = produit.specificationproduit_set.all().order_by('-est_defaut')
         serializer = SpecificationProduitSerializer(specs, many=True)
         return Response(serializer.data)
+    
+    def perform_create(self, serializer):
+        # Temporaire : associer au premier commerçant trouvé
+        from .models import DetailsCommercant
+        commercant = DetailsCommercant.objects.first()
+        serializer.save(commercant=commercant)
+        
+        
+        
+from rest_framework import viewsets
+from rest_framework.permissions import IsAuthenticated  # ou [] si pas d'auth requis
+from .models import SpecificationProduit, MouvementStock
+from .serializers import SpecificationProduitSerializer, MouvementStockSerializer
+
+class SpecificationProduitViewSet(viewsets.ModelViewSet):
+    queryset = SpecificationProduit.objects.all()
+    serializer_class = SpecificationProduitSerializer
+    permission_classes = [AllowAny]  # adapte selon besoin
+
+class MouvementStockViewSet(viewsets.ModelViewSet):
+    queryset = MouvementStock.objects.all()
+    serializer_class = MouvementStockSerializer
+    permission_classes = [AllowAny]
+
+    def perform_create(self, serializer):
+        mouvement = serializer.save()
+        spec = mouvement.specification
+        if mouvement.type_mouvement == 'entree':
+            spec.quantite_stock += mouvement.quantite
+        elif mouvement.type_mouvement == 'sortie':
+            if spec.quantite_stock < mouvement.quantite:
+                raise serializers.ValidationError("Stock insuffisant pour ce mouvement de sortie")
+            spec.quantite_stock -= mouvement.quantite
+        spec.save()
 
 
+@csrf_exempt
+@api_view(['POST'])
+def upload_image(request):
+    """
+    Upload une image et retourne son URL
+    """
+    try:
+        if 'image' not in request.FILES:
+            return Response(
+                {'error': 'Aucune image fournie'}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        image_file = request.FILES['image']
+        
+        # Validation du fichier
+        if not image_file.content_type.startswith('image/'):
+            return Response(
+                {'error': 'Le fichier doit être une image'}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Taille max 5MB
+        if image_file.size > 5 * 1024 * 1024:
+            return Response(
+                {'error': 'Fichier trop volumineux (max 5MB)'}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Générer un nom unique pour éviter les conflits
+        extension = image_file.name.split('.')[-1]
+        unique_filename = f"{uuid.uuid4()}.{extension}"
+        
+        # Créer le dossier uploads s'il n'existe pas
+        upload_path = os.path.join('uploads', 'images')
+        os.makedirs(os.path.join(settings.MEDIA_ROOT, upload_path), exist_ok=True)
+        
+        # Sauvegarder le fichier
+        file_path = os.path.join(upload_path, unique_filename)
+        saved_path = default_storage.save(file_path, image_file)
+        
+        # Construire l'URL complète
+        image_url = request.build_absolute_uri(settings.MEDIA_URL + saved_path)
+        
+        return Response({
+            'success': True,
+            'url': image_url,
+            'filename': unique_filename,
+            'size': image_file.size
+        }, status=status.HTTP_201_CREATED)
+        
+    except Exception as e:
+        return Response(
+            {'error': f'Erreur serveur: {str(e)}'}, 
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
 # ✅ AJOUT des ViewSets manquants
 class ImageProduitViewSet(viewsets.ModelViewSet):
     queryset = ImageProduit.objects.all()
