@@ -101,7 +101,7 @@ class Produit(models.Model):
     nom = models.CharField(max_length=200)
     description = models.TextField()
     categorie = models.ForeignKey('Categorie', on_delete=models.SET_NULL, null=True)
-    commercant = models.ForeignKey('DetailsCommercant', on_delete=models.CASCADE)
+    commercant = models.ForeignKey('DetailsCommercant', on_delete=models.CASCADE, null=True, blank=True)
 
 
 class ImageProduit(models.Model):
