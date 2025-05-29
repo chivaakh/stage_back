@@ -9,6 +9,12 @@ from .serializers import ProduitSerializer, ImageProduitSerializer, Specificatio
 import logging
 
 logger = logging.getLogger(__name__)
+from rest_framework import viewsets
+# from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import AllowAny
+from .models import Produit
+from .serializers import ProduitSerializer
+from . import serializers
 
 class ProduitViewSet(viewsets.ModelViewSet):
     queryset = Produit.objects.all()
@@ -155,6 +161,41 @@ class ProduitViewSet(viewsets.ModelViewSet):
         specs = produit.specificationproduit_set.all().order_by('-est_defaut')
         serializer = SpecificationProduitSerializer(specs, many=True)
         return Response(serializer.data)
+    
+    def perform_create(self, serializer):
+        # Temporaire : associer au premier commerçant trouvé
+        from .models import DetailsCommercant
+        commercant = DetailsCommercant.objects.first()
+        serializer.save(commercant=commercant)
+        
+        
+        
+from rest_framework import viewsets
+from rest_framework.permissions import IsAuthenticated  # ou [] si pas d'auth requis
+from .models import SpecificationProduit, MouvementStock
+from .serializers import SpecificationProduitSerializer, MouvementStockSerializer
+
+class SpecificationProduitViewSet(viewsets.ModelViewSet):
+    queryset = SpecificationProduit.objects.all()
+    serializer_class = SpecificationProduitSerializer
+    permission_classes = [AllowAny]  # adapte selon besoin
+
+class MouvementStockViewSet(viewsets.ModelViewSet):
+    queryset = MouvementStock.objects.all()
+    serializer_class = MouvementStockSerializer
+    permission_classes = [AllowAny]
+
+    def perform_create(self, serializer):
+        mouvement = serializer.save()
+        spec = mouvement.specification
+        if mouvement.type_mouvement == 'entree':
+            spec.quantite_stock += mouvement.quantite
+        elif mouvement.type_mouvement == 'sortie':
+            if spec.quantite_stock < mouvement.quantite:
+                raise serializers.ValidationError("Stock insuffisant pour ce mouvement de sortie")
+            spec.quantite_stock -= mouvement.quantite
+        spec.save()
+
 
 
 # ✅ AJOUT des ViewSets manquants
