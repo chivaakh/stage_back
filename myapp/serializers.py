@@ -88,7 +88,24 @@ class MouvementStockSerializer(serializers.ModelSerializer):
 
 
 
+from rest_framework import serializers
+from .models import Categorie
 
+class CategorieSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Categorie
+        fields = ['id', 'nom', 'description']
+
+from rest_framework import serializers
+from .models import Notification
+
+class NotificationSerializer(serializers.ModelSerializer):
+    produit = serializers.StringRelatedField(read_only=True)  # Affiche le nom du produit
+
+    class Meta:
+        model = Notification
+        fields = ['id', 'produit', 'date_notification', 'message', 'est_lue']
+        read_only_fields = ['date_notification', 'produit', 'message']
 
 
 

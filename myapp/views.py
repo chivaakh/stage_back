@@ -280,3 +280,34 @@ class SpecificationProduitViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         return SpecificationProduit.objects.select_related('produit').order_by('produit', '-est_defaut')
+
+from rest_framework import viewsets
+from .models import Categorie
+from .serializers import CategorieSerializer
+from rest_framework.permissions import AllowAny
+
+class CategorieViewSet(viewsets.ModelViewSet):
+    queryset = Categorie.objects.all()
+    serializer_class = CategorieSerializer
+    permission_classes = [AllowAny]  # ou adapte selon tes besoins
+
+from rest_framework import viewsets
+from rest_framework.permissions import AllowAny  # adapte selon ton besoin
+from .models import Notification
+from .serializers import NotificationSerializer
+
+class NotificationViewSet(viewsets.ModelViewSet):
+    queryset = Notification.objects.all().order_by('-date_notification')
+    serializer_class = NotificationSerializer
+    permission_classes = [AllowAny]  # adapte pour sécuriser si besoin
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        # Filtrage possible par query params (ex: ?est_lue=true)
+        est_lue = self.request.query_params.get('est_lue')
+        if est_lue is not None:
+            if est_lue.lower() in ['true', '1']:
+                queryset = queryset.filter(est_lue=True)
+            elif est_lue.lower() in ['false', '0']:
+                queryset = queryset.filter(est_lue=False)
+        return queryset

@@ -7,6 +7,7 @@ from .views import ProduitViewSet
 from .views import ProduitViewSet, ImageProduitViewSet, SpecificationProduitViewSet
 from .views import ProduitViewSet,SpecificationProduitViewSet, MouvementStockViewSet
 
+from .views import NotificationViewSet
 
 from .views import ProduitViewSet, ImageProduitViewSet, SpecificationProduitViewSet, upload_image
 
@@ -14,6 +15,9 @@ router = DefaultRouter()
 router.register(r'produits', ProduitViewSet, basename='produit')
 router.register(r'specifications', SpecificationProduitViewSet, basename='specification')
 router.register(r'mouvements_stock', MouvementStockViewSet, basename='mouvement_stock')
+router.register(r'categories', CategorieViewSet, basename='categorie')
+
+router.register(r'notifications', NotificationViewSet, basename='notification')
 
 urlpatterns = [
     path('', include(router.urls)),
