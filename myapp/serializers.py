@@ -108,14 +108,7 @@ class NotificationSerializer(serializers.ModelSerializer):
         read_only_fields = ['date_notification', 'produit', 'message']
 
 
-
-
-
-
-
-
-
-
+# Ajouter ce serializer à votre serializers.py existant
 
 
 

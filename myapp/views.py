@@ -311,3 +311,5 @@ class NotificationViewSet(viewsets.ModelViewSet):
             elif est_lue.lower() in ['false', '0']:
                 queryset = queryset.filter(est_lue=False)
         return queryset
+    
+    # Ajouter cette classe à votre views.py existant
