@@ -107,18 +107,76 @@ class NotificationSerializer(serializers.ModelSerializer):
         fields = ['id', 'produit', 'date_notification', 'message', 'est_lue']
         read_only_fields = ['date_notification', 'produit', 'message']
 
+from rest_framework import serializers
+from .models import Commande, DetailCommande
 
+class DetailCommandeSerializer(serializers.ModelSerializer):
+    id = serializers.IntegerField(required=False)  # permet l’update via id
+    specification = serializers.PrimaryKeyRelatedField(queryset=SpecificationProduit.objects.all())
+    specification_nom = serializers.CharField(source='specification.nom', read_only=True)
+    class Meta:
+        model = DetailCommande
+        fields = ['id', 'quantite', 'prix_unitaire', 'specification', 'specification_nom']
 
+class CommandeSerializer(serializers.ModelSerializer):
+    client_nom = serializers.SerializerMethodField()
+    client_adresse = serializers.SerializerMethodField()
+    client_ville = serializers.SerializerMethodField()
+    client_pays = serializers.SerializerMethodField()
+    details = DetailCommandeSerializer(source='detailcommande_set', many=True)
+    
+    class Meta:
+        model = Commande
+        fields = '__all__'
 
+    def get_client_nom(self, obj):
+        try:
+            return obj.client.nom
+        except:
+            return "-"
 
+    def get_client_adresse(self, obj):
+        try:
+            return obj.client.adresse
+        except:
+            return "-"
 
+    def get_client_ville(self, obj):
+        try:
+            return obj.client.ville
+        except:
+            return "-"
 
+    def get_client_pays(self, obj):
+        try:
+            return obj.client.pays
+        except:
+            return "-"
 
+    def update(self, instance, validated_data):
+        details_data = validated_data.pop('detailcommande_set', [])
 
+        # Met à jour les champs simples
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
 
+        # Gère les détails imbriqués : suppression des détails non présents
+        detail_ids = [item.get('id') for item in details_data if 'id' in item]
+        DetailCommande.objects.filter(commande=instance).exclude(id__in=detail_ids).delete()
 
+        # Mise à jour ou création des détails
+        for detail_data in details_data:
+            detail_id = detail_data.get('id', None)
+            if detail_id:
+                detail = DetailCommande.objects.get(id=detail_id, commande=instance)
+                for attr, value in detail_data.items():
+                    setattr(detail, attr, value)
+                detail.save()
+            else:
+                DetailCommande.objects.create(commande=instance, **detail_data)
 
-
+        return instance
 
 
 # from rest_framework import serializers

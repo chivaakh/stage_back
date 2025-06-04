@@ -6,7 +6,8 @@ from .import views
 from .views import ProduitViewSet
 from .views import ProduitViewSet, ImageProduitViewSet, SpecificationProduitViewSet
 from .views import ProduitViewSet,SpecificationProduitViewSet, MouvementStockViewSet
-
+from rest_framework.routers import DefaultRouter
+from .views import CommandeViewSet, DetailCommandeViewSet
 from .views import NotificationViewSet
 
 from .views import ProduitViewSet, ImageProduitViewSet, SpecificationProduitViewSet, upload_image
@@ -16,6 +17,9 @@ router.register(r'produits', ProduitViewSet, basename='produit')
 router.register(r'specifications', SpecificationProduitViewSet, basename='specification')
 router.register(r'mouvements_stock', MouvementStockViewSet, basename='mouvement_stock')
 router.register(r'categories', CategorieViewSet, basename='categorie')
+
+router.register(r'commandes', CommandeViewSet)
+router.register(r'detail-commandes', DetailCommandeViewSet)
 
 router.register(r'notifications', NotificationViewSet, basename='notification')
 
