@@ -185,3 +185,6 @@ class Notification(models.Model):
 
     def __str__(self):
         return f"Notification {self.produit.nom} - {self.date_notification.strftime('%Y-%m-%d')}"
+
+# Ajouter ce modèle à votre models.py existant
+

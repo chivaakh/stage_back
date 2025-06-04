@@ -312,6 +312,7 @@ class NotificationViewSet(viewsets.ModelViewSet):
                 queryset = queryset.filter(est_lue=False)
         return queryset
     
+<<<<<<< HEAD
 from .models import Commande, DetailCommande
 from .serializers import CommandeSerializer, DetailCommandeSerializer
 
@@ -325,3 +326,6 @@ class DetailCommandeViewSet(viewsets.ModelViewSet):
     serializer_class = DetailCommandeSerializer
     permission_classes = [AllowAny]
 
+=======
+    # Ajouter cette classe à votre views.py existant
+>>>>>>> 7e08b3a922f02d8948a143a1aa440910b206d999

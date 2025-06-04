@@ -110,6 +110,7 @@ class NotificationSerializer(serializers.ModelSerializer):
 from rest_framework import serializers
 from .models import Commande, DetailCommande
 
+<<<<<<< HEAD
 class DetailCommandeSerializer(serializers.ModelSerializer):
     id = serializers.IntegerField(required=False)  # permet l’update via id
     specification = serializers.PrimaryKeyRelatedField(queryset=SpecificationProduit.objects.all())
@@ -164,6 +165,9 @@ class CommandeSerializer(serializers.ModelSerializer):
         # Gère les détails imbriqués : suppression des détails non présents
         detail_ids = [item.get('id') for item in details_data if 'id' in item]
         DetailCommande.objects.filter(commande=instance).exclude(id__in=detail_ids).delete()
+=======
+# Ajouter ce serializer à votre serializers.py existant
+>>>>>>> 7e08b3a922f02d8948a143a1aa440910b206d999
 
         # Mise à jour ou création des détails
         for detail_data in details_data:
