@@ -1,6 +1,8 @@
 from django.db import models
 from django.contrib.auth.models import AbstractBaseUser, PermissionsMixin, BaseUserManager
-
+   
+from django.db import models
+from django.utils import timezone
 
 class UtilisateurManager(BaseUserManager):
     def create_user(self, email, telephone, password=None, **extra_fields):
@@ -173,9 +175,7 @@ class JournalAdmin(models.Model):
     details = models.TextField()
     date_heure = models.DateTimeField(auto_now_add=True)
     
-    
-from django.db import models
-from django.utils import timezone
+ 
 
 class Notification(models.Model):
     produit = models.ForeignKey('Produit', on_delete=models.CASCADE)

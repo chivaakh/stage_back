@@ -25,7 +25,13 @@ SECRET_KEY = 'django-insecure--$_mfn_ow4kgg0*3i2wze3yh)!mrv11@n33*^8*bn!bt52t(9a
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = [
+    'localhost',
+    '127.0.0.1',
+    '10.0.2.2',        # Émulateur Android
+    '192.168.100.9',   # Votre IP locale Wi-Fi
+    '192.168.56.1',    # Votre IP Ethernet (VirtualBox/VMware)
+]
 
 
 # Application definition
@@ -59,10 +65,28 @@ MIDDLEWARE = [
 # CORS config - autorise localhost:5173 uniquement
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",
+    "http://localhost:8000",       # Django dev server
+    "http://127.0.0.1:8000",       # Django dev server
+    "http://10.0.2.2:8000",        # Émulateur Android
+    "http://192.168.100.9:8000",   # Device physique (votre IP Wi-Fi)
+    "http://192.168.56.1:8000",    # Si vous utilisez VirtualBox/VMware
 ]
 
 # Optionnel : si besoin de cookies, sessions cross-origin
 CORS_ALLOW_CREDENTIALS = True
+
+# Headers autorisés pour les requêtes Flutter
+CORS_ALLOW_HEADERS = [
+    'accept',
+    'accept-encoding',
+    'authorization',
+    'content-type',
+    'dnt',
+    'origin',
+    'user-agent',
+    'x-csrftoken',
+    'x-requested-with',
+]
 
 ROOT_URLCONF = 'ishrili.urls'
 
@@ -80,17 +104,9 @@ REST_FRAMEWORK = {
     'PAGE_SIZE': 10,
 }
 
-# # Configuration CORS pour accès depuis Flutter
-# CORS_ALLOWED_ORIGINS = [
-#     "http://localhost:8000",
-#     "http://127.0.0.1:8000",
-#     # Ajoutez ici les origines autorisées pour votre application mobile
-# ]
 
 
-CORS_ALLOWED_ORIGINS = [
-    "http://localhost:5173",  # Vite/React
-]
+
 
 
 
@@ -175,3 +191,31 @@ STATIC_URL = 'static/'
 # https://docs.djangoproject.com/en/4.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+# Configuration pour les logs (utile pour débugger les appels API)
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+        },
+    },
+    'loggers': {
+        'django': {
+            'handlers': ['console'],
+            'level': 'INFO',
+        },
+    },
+}
+
+# Configuration Swagger/OpenAPI (pour documenter votre API)
+SWAGGER_SETTINGS = {
+    'SECURITY_DEFINITIONS': {
+        'Token': {
+            'type': 'apiKey',
+            'name': 'Authorization',
+            'in': 'header'
+        }
+    }
+}

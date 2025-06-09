@@ -312,4 +312,17 @@ class NotificationViewSet(viewsets.ModelViewSet):
                 queryset = queryset.filter(est_lue=False)
         return queryset
     
+from .models import Commande, DetailCommande
+from .serializers import CommandeSerializer, DetailCommandeSerializer
+
+class CommandeViewSet(viewsets.ModelViewSet):
+    queryset = Commande.objects.all().order_by('-date_commande')
+    serializer_class = CommandeSerializer
+    permission_classes = [AllowAny]
+
+class DetailCommandeViewSet(viewsets.ModelViewSet):
+    queryset = DetailCommande.objects.all()
+    serializer_class = DetailCommandeSerializer
+    permission_classes = [AllowAny]
+
     # Ajouter cette classe à votre views.py existant
