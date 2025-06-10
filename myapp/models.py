@@ -1,7 +1,8 @@
 from django.db import models
 import uuid
-from django.utils import timezone
 from datetime import timedelta
+from django.utils import timezone
+
 
 
 class Utilisateur(models.Model):
@@ -164,3 +165,17 @@ class JournalAdmin(models.Model):
     action = models.CharField(max_length=255)
     details = models.TextField()
     date_heure = models.DateTimeField(auto_now_add=True)
+    
+ 
+
+class Notification(models.Model):
+    produit = models.ForeignKey('Produit', on_delete=models.CASCADE)
+    date_notification = models.DateTimeField(default=timezone.now)
+    message = models.TextField()
+    est_lue = models.BooleanField(default=False)
+
+    def __str__(self):
+        return f"Notification {self.produit.nom} - {self.date_notification.strftime('%Y-%m-%d')}"
+
+# Ajouter ce modèle à votre models.py existant
+
