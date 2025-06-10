@@ -1,11 +1,10 @@
 # myapp/views.py - VERSION COMPLÈTE avec tous les ViewSets
-
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from django.db import transaction
-from .models import Produit, ImageProduit, SpecificationProduit
-from .serializers import ProduitSerializer, ImageProduitSerializer, SpecificationProduitSerializer
+from .models import Produit, ImageProduit, SpecificationProduit, Utilisateur, PasswordResetToken
+from .serializers import ProduitSerializer, ImageProduitSerializer, SpecificationProduitSerializer , SignupSerializer, LoginSerializer
 import logging
 import os
 from django.conf import settings
@@ -17,14 +16,259 @@ from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from rest_framework import status
 import uuid
-
+from rest_framework.views import APIView
 logger = logging.getLogger(__name__)
 from rest_framework import viewsets
 # from rest_framework.permissions import IsAuthenticated
-from rest_framework.permissions import AllowAny
-from .models import Produit
-from .serializers import ProduitSerializer
+from rest_framework.permissions import AllowAny 
 from . import serializers
+from django.contrib.auth.hashers import check_password
+from django.db.models import Q
+from django.core.mail import send_mail
+from django.contrib.auth.hashers import make_password
+from google.oauth2 import id_token
+from google.auth.transport import requests as google_requests
+from django.db import transaction
+import requests
+from django.utils.crypto import get_random_string
+
+
+
+
+
+
+
+
+class SignupView(APIView):
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        try:
+            serializer = SignupSerializer(data=request.data)
+            if serializer.is_valid(raise_exception=True):  # raise_exception True pour gérer les erreurs
+                serializer.save()
+                return Response({"message": "Utilisateur créé avec succès"}, status=status.HTTP_201_CREATED)
+            else:
+                return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            import traceback
+            traceback_str = traceback.format_exc()
+            return Response({"error": str(e), "trace": traceback_str}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+
+class LoginView(APIView):
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        serializer = LoginSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        identifiant = serializer.validated_data['identifiant']
+        mot_de_passe = serializer.validated_data['mot_de_passe']
+
+        try:
+            utilisateur = Utilisateur.objects.get(
+                Q(email=identifiant) | Q(telephone=identifiant)
+            )
+        except Utilisateur.DoesNotExist:
+            return Response({"error": "Identifiant ou mot de passe incorrect."}, status=401)
+
+        if not check_password(mot_de_passe, utilisateur.mot_de_passe):
+            return Response({"error": "Identifiant ou mot de passe incorrect."}, status=401)
+
+        # Ne pas utiliser login() ici, faire une session manuelle
+        request.session['user_id'] = utilisateur.id_utilisateur  # stocker l'id dans la session
+
+        return Response({"message": "Connexion réussie"}, status=200)
+
+
+
+
+class RequestPasswordResetView(APIView):
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        email = request.data.get('email')
+        if not email:
+            return Response({"error": "Email requis"}, status=400)
+
+        try:
+            utilisateur = Utilisateur.objects.get(email=email)
+        except Utilisateur.DoesNotExist:
+            return Response({"error": "Email non trouvé"}, status=404)
+
+        # Créer un token
+        token_obj = PasswordResetToken.objects.create(utilisateur=utilisateur)
+
+        # Construire URL de reset (à adapter à ton frontend)
+        reset_url = f"https://localhost:5173/reset-password/{token_obj.token}"
+
+        # Envoyer email
+        send_mail(
+            "Réinitialisation du mot de passe",
+            f"Pour réinitialiser votre mot de passe, cliquez sur ce lien : {reset_url}",
+            "no-reply@tonapp.com",
+            [email],
+        )
+
+        return Response({"message": "Email envoyé si compte existant"}, status=200)
+
+
+
+class ResetPasswordView(APIView):
+    permission_classes = [AllowAny]
+
+    def post(self, request, token):
+        mot_de_passe = request.data.get('mot_de_passe')
+        if not mot_de_passe:
+            return Response({"error": "Mot de passe requis"}, status=400)
+
+        try:
+            token_obj = PasswordResetToken.objects.get(token=token)
+        except PasswordResetToken.DoesNotExist:
+            return Response({"error": "Token invalide"}, status=404)
+
+        if token_obj.is_expired():
+            return Response({"error": "Token expiré"}, status=400)
+
+        utilisateur = token_obj.utilisateur
+        utilisateur.mot_de_passe = make_password(mot_de_passe)
+        utilisateur.save()
+
+        # Supprimer ou invalider le token
+        token_obj.delete()
+
+        return Response({"message": "Mot de passe réinitialisé avec succès"}, status=200)
+
+
+
+
+class GoogleLoginView(APIView):
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        token = request.data.get("token")
+        if not token:
+            return Response({"error": "Token requis"}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            # Valider le token Google et récupérer les infos utilisateur
+            idinfo = id_token.verify_oauth2_token(token, google_requests.Request(), "128897548037-fi6qsoqngat2rg46apt6pq6tfspbfcp3.apps.googleusercontent.com")
+
+            # idinfo contient les infos utilisateur validées
+            email = idinfo.get("email")
+            nom = idinfo.get("family_name") or ""
+            prenom = idinfo.get("given_name") or ""
+            google_sub = idinfo.get("sub")  # id Google unique
+
+            if not email:
+                return Response({"error": "Email non trouvé dans le token"}, status=status.HTTP_400_BAD_REQUEST)
+
+            # Recherche ou création utilisateur dans ta base
+            with transaction.atomic():
+                telephone_temporaire = f"google_{get_random_string(length=10)}"
+                utilisateur, created = Utilisateur.objects.get_or_create(
+                    email=email,
+                    defaults={
+                        "nom": nom,
+                        "prenom": prenom,
+                        "telephone": telephone_temporaire,  # tu peux gérer ça comme tu veux
+                        "mot_de_passe": make_password(google_sub),  # hash d'une valeur unique Google
+                        "type_utilisateur": "vendeur",  # ou ce que tu veux par défaut
+                    },
+                )
+
+            # Ici tu peux créer une session manuelle ou un JWT selon ton auth backend
+            request.session['user_id'] = utilisateur.id_utilisateur
+
+            return Response({
+                "message": "Connexion Google réussie",
+                "user": {
+                    "email": utilisateur.email,
+                    "nom": utilisateur.nom,
+                    "prenom": utilisateur.prenom,
+                }
+            }, status=status.HTTP_200_OK)
+
+        # except ValueError:
+        #     # Token invalide
+        #     return Response({"error": "Token invalide"}, status=status.HTTP_400_BAD_REQUEST)
+        except ValueError as e:
+            import traceback
+            print("Erreur Google token :", e)
+            traceback.print_exc()
+            return Response({"error": f"Token invalide : {str(e)}"}, status=status.HTTP_400_BAD_REQUEST)
+
+
+
+
+class FacebookLoginView(APIView):
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        access_token = request.data.get("access_token")
+        email = request.data.get("email")
+
+        if not access_token or not email:
+            return Response({"error": "Token et email requis"}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Valider le token Facebook
+        url = f'https://graph.facebook.com/me?access_token={access_token}&fields=email,name'
+        response = requests.get(url)
+        if response.status_code != 200:
+            return Response({"error": "Token Facebook invalide"}, status=status.HTTP_400_BAD_REQUEST)
+
+        facebook_data = response.json()
+        name = facebook_data.get("name")
+        if not name:
+            return Response({"error": "Nom non trouvé dans le token"}, status=status.HTTP_400_BAD_REQUEST)
+
+        with transaction.atomic():
+            utilisateur, created = Utilisateur.objects.get_or_create(email=email)
+            # Met à jour les infos à chaque login Facebook
+            utilisateur.nom = name.split(" ")[-1]
+            utilisateur.prenom = " ".join(name.split(" ")[:-1])
+            if not utilisateur.telephone:
+                utilisateur.telephone = ""  # ou une valeur par défaut si tu veux
+            utilisateur.mot_de_passe = make_password(email)  # idéalement, un mot de passe généré ou token
+            if not utilisateur.type_utilisateur:
+                utilisateur.type_utilisateur = "vendeur"
+            utilisateur.save()
+
+        return Response({
+            "message": "Connexion Facebook réussie",
+            "created": created,
+            "user": {
+                "email": utilisateur.email,
+                "nom": utilisateur.nom,
+                "prenom": utilisateur.prenom,
+                "telephone": utilisateur.telephone,
+                "type_utilisateur": utilisateur.type_utilisateur,
+            }
+        }, status=status.HTTP_200_OK)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 class ProduitViewSet(viewsets.ModelViewSet):
     queryset = Produit.objects.all()

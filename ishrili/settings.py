@@ -58,7 +58,7 @@ MIDDLEWARE = [
 ]
 # CORS config - autorise localhost:5173 uniquement
 CORS_ALLOWED_ORIGINS = [
-    "http://localhost:5173",
+    "https://localhost:5173",
 ]
 
 # Optionnel : si besoin de cookies, sessions cross-origin
@@ -88,9 +88,9 @@ REST_FRAMEWORK = {
 # ]
 
 
-CORS_ALLOWED_ORIGINS = [
-    "http://localhost:5173",  # Vite/React
-]
+# CORS_ALLOWED_ORIGINS = [
+#     "http://localhost:5173",  # Vite/React
+# ]
 
 
 
@@ -128,7 +128,7 @@ DATABASES = {
         'ENGINE': 'django.db.backends.mysql',
         'NAME': 'stage',
         'USER': 'root',
-        'PASSWORD': '1234',
+        'PASSWORD': '',
         'HOST': 'localhost',
         'PORT': '3306',
     }
@@ -153,7 +153,7 @@ AUTH_PASSWORD_VALIDATORS = [
 ]
 
 # Ajoutez cette ligne à settings.py
-AUTH_USER_MODEL = 'myapp.Utilisateur'
+# AUTH_USER_MODEL = 'myapp.Utilisateur'
 # Internationalization
 # https://docs.djangoproject.com/en/4.2/topics/i18n/
 
@@ -175,3 +175,17 @@ STATIC_URL = 'static/'
 # https://docs.djangoproject.com/en/4.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+
+SESSION_COOKIE_AGE = 1209600
+
+
+EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+EMAIL_HOST = 'smtp.gmail.com'
+EMAIL_PORT = 587
+EMAIL_USE_TLS = True
+EMAIL_HOST_USER = 'minolilo07@gmail.com'
+EMAIL_HOST_PASSWORD = 'ywov tkrc qltz gtda'
+DEFAULT_FROM_EMAIL = 'no-reply@Ishrili.com'
+
+

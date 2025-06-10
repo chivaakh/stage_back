@@ -1,5 +1,41 @@
 from rest_framework import serializers
-from .models import Produit, ImageProduit, SpecificationProduit
+from .models import Produit, ImageProduit, SpecificationProduit, Utilisateur
+from django.contrib.auth.hashers import make_password
+
+
+class SignupSerializer(serializers.ModelSerializer):
+    prenom = serializers.CharField(write_only=True, required=True)
+    nom = serializers.CharField(required=False, allow_blank=True)
+    mot_de_passe = serializers.CharField(write_only=True, required=True, min_length=6)
+    email = serializers.EmailField(required=False, allow_blank=True)
+    telephone = serializers.CharField(required=True)
+
+    class Meta:
+        model = Utilisateur
+        fields = ['nom', 'prenom', 'email', 'telephone', 'mot_de_passe']
+
+    def validate(self, data):
+        if not data.get('email') and not data.get('telephone'):
+            raise serializers.ValidationError("Email ou téléphone doit être renseigné.")
+        return data
+
+    def create(self, validated_data):
+        # Hash du mot de passe
+        mot_de_passe = validated_data.pop('mot_de_passe')
+        utilisateur = Utilisateur(**validated_data)
+        utilisateur.mot_de_passe = make_password(mot_de_passe)
+        utilisateur.type_utilisateur = 'vendeur'  # Role par défaut
+        utilisateur.save()
+        return utilisateur
+
+
+
+class LoginSerializer(serializers.Serializer):
+    identifiant = serializers.CharField(required=True)  # email ou téléphone
+    mot_de_passe = serializers.CharField(required=True, write_only=True)
+
+
+
 
 class ImageProduitSerializer(serializers.ModelSerializer):
     class Meta:
