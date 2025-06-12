@@ -31,11 +31,10 @@ from google.auth.transport import requests as google_requests
 from django.db import transaction
 import requests
 from django.utils.crypto import get_random_string
-
-
-
-
-
+from .serializers import SignupWithDetailsSerializer
+from rest_framework.permissions import AllowAny
+from rest_framework.response import Response
+from rest_framework import status
 
 
 
@@ -83,6 +82,15 @@ class LoginView(APIView):
         return Response({"message": "Connexion réussie"}, status=200)
 
 
+
+class SignupWithDetailsView(APIView):
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        serializer = SignupWithDetailsSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response({"message":"Inscription réussie"}, status=status.HTTP_201_CREATED)
 
 
 class RequestPasswordResetView(APIView):
@@ -247,26 +255,6 @@ class FacebookLoginView(APIView):
                 "type_utilisateur": utilisateur.type_utilisateur,
             }
         }, status=status.HTTP_200_OK)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 

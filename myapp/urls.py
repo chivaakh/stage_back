@@ -33,12 +33,14 @@ urlpatterns = [
     # path('test/', views.test_api, name='test_api'),
     path('upload-image/', upload_image, name='upload-image'),  # NOUVELLE ROUTE
     path('api/signup/', SignupView.as_view(), name='signup'),
+    path('api/signup-with-details/', SignupWithDetailsView.as_view(), name='signup-with-details'),
     path('api/login/', LoginView.as_view(), name='login'),
     path('api/request-password-reset/', RequestPasswordResetView.as_view(), name='request-password-reset'),
     path('api/reset-password/<uuid:token>/', ResetPasswordView.as_view(), name='reset-password'),
     path("api/login/google/", GoogleLoginView.as_view(), name="google-login"),
     path('api/facebook-login/', FacebookLoginView.as_view(), name='facebook-login'),
     path('upload-image/', upload_image, name='upload-image'),
+    
 ]
 
 

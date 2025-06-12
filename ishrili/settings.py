@@ -30,7 +30,9 @@ ALLOWED_HOSTS = [
     '127.0.0.1',
     '10.0.2.2',        # Émulateur Android
     '192.168.100.9',   # Votre IP locale Wi-Fi
-    '192.168.56.1',    # Votre IP Ethernet (VirtualBox/VMware)
+    '192.168.56.1', # Votre IP Ethernet (VirtualBox/VMware)
+    '192.168.100.79',
+    
 ]
 
 
@@ -70,7 +72,8 @@ CORS_ALLOWED_ORIGINS = [
     "http://127.0.0.1:8000",       # Django dev server
     "http://10.0.2.2:8000",        # Émulateur Android
     "http://192.168.100.9:8000",   # Device physique (votre IP Wi-Fi)
-    "http://192.168.56.1:8000",    # Si vous utilisez VirtualBox/VMware
+    "http://192.168.56.1:8000",
+    "http://192.168.100.79:8000",     # Si vous utilisez VirtualBox/VMware
 ]
 
 # Optionnel : si besoin de cookies, sessions cross-origin
@@ -144,7 +147,7 @@ DATABASES = {
         'ENGINE': 'django.db.backends.mysql',
         'NAME': 'stage',
         'USER': 'root',
-        'PASSWORD': '',
+        'PASSWORD': '1234',
         'HOST': 'localhost',
         'PORT': '3306',
     }

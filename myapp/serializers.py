@@ -1,6 +1,9 @@
 from rest_framework import serializers
 from .models import Produit, ImageProduit, SpecificationProduit, Utilisateur
 from django.contrib.auth.hashers import make_password
+from rest_framework import serializers
+from django.contrib.auth.hashers import make_password
+from .models import Utilisateur, DetailsClient, DetailsCommercant
 
 
 class SignupSerializer(serializers.ModelSerializer):
@@ -20,13 +23,18 @@ class SignupSerializer(serializers.ModelSerializer):
         return data
 
     def create(self, validated_data):
-        # Hash du mot de passe
         mot_de_passe = validated_data.pop('mot_de_passe')
         utilisateur = Utilisateur(**validated_data)
         utilisateur.mot_de_passe = make_password(mot_de_passe)
-        utilisateur.type_utilisateur = 'vendeur'  # Role par défaut
-        utilisateur.save()
+        utilisateur.type_utilisateur = 'vendeur'
+        try:
+            utilisateur.save()
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            raise serializers.ValidationError({"non_field_errors": [str(e)]})
         return utilisateur
+
 
 
 
@@ -35,6 +43,53 @@ class LoginSerializer(serializers.Serializer):
     mot_de_passe = serializers.CharField(required=True, write_only=True)
 
 
+class DetailsClientSerializer(serializers.ModelSerializer):
+    class Meta:
+        model  = DetailsClient
+        fields = ['nom','prenom','adresse','ville','code_postal','pays']
+
+class DetailsCommercantSerializer(serializers.ModelSerializer):
+    class Meta:
+        model  = DetailsCommercant
+        fields = [
+            'nom_boutique','description_boutique','adresse_commerciale',
+            'ville','code_postal','pays','est_verifie','note_moyenne',
+            'commission_rate'
+        ]
+
+class SignupWithDetailsSerializer(serializers.ModelSerializer):
+    mot_de_passe         = serializers.CharField(write_only=True)
+    type_utilisateur     = serializers.ChoiceField(
+                              choices=Utilisateur.TYPE_UTILISATEUR_CHOICES,
+                              default='client'
+                          )
+    details_client       = DetailsClientSerializer(required=False, allow_null=True)
+    details_commercant   = DetailsCommercantSerializer(required=False, allow_null=True)
+
+    class Meta:
+        model  = Utilisateur
+        fields = [
+            'prenom','nom','email','telephone','type_utilisateur','mot_de_passe',
+            'details_client','details_commercant'
+        ]
+
+    def create(self, validated_data):
+        details_client_data     = validated_data.pop('details_client', None)
+        details_commercant_data = validated_data.pop('details_commercant', None)
+        pwd                     = validated_data.pop('mot_de_passe')
+
+        # 1) Crée l’utilisateur
+        utilisateur = Utilisateur(**validated_data)
+        utilisateur.mot_de_passe = make_password(pwd)
+        utilisateur.save()
+
+        # 2) Crée les détails s’ils sont fournis
+        if details_client_data:
+            DetailsClient.objects.create(utilisateur=utilisateur, **details_client_data)
+        if details_commercant_data:
+            DetailsCommercant.objects.create(utilisateur=utilisateur, **details_commercant_data)
+
+        return utilisateur
 
 
 class ImageProduitSerializer(serializers.ModelSerializer):
