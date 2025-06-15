@@ -82,7 +82,6 @@ class LoginView(APIView):
         return Response({"message": "Connexion réussie"}, status=200)
 
 
-
 class SignupWithDetailsView(APIView):
     permission_classes = [AllowAny]
 
@@ -90,7 +89,8 @@ class SignupWithDetailsView(APIView):
         serializer = SignupWithDetailsSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         serializer.save()
-        return Response({"message":"Inscription réussie"}, status=status.HTTP_201_CREATED)
+        return Response({"message": "Inscription complète réussie"}, status=201)
+
 
 
 class RequestPasswordResetView(APIView):
