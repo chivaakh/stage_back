@@ -43,53 +43,61 @@ class LoginSerializer(serializers.Serializer):
     mot_de_passe = serializers.CharField(required=True, write_only=True)
 
 
+
 class DetailsClientSerializer(serializers.ModelSerializer):
     class Meta:
-        model  = DetailsClient
-        fields = ['nom','prenom','adresse','ville','code_postal','pays']
+        model = DetailsClient
+        fields = ['nom', 'prenom', 'adresse', 'ville', 'code_postal', 'pays']
 
 class DetailsCommercantSerializer(serializers.ModelSerializer):
     class Meta:
-        model  = DetailsCommercant
+        model = DetailsCommercant
         fields = [
-            'nom_boutique','description_boutique','adresse_commerciale',
-            'ville','code_postal','pays','est_verifie','note_moyenne',
-            'commission_rate'
+            'nom_boutique', 'description_boutique', 'adresse_commerciale',
+            'ville', 'code_postal', 'pays', 'commission_rate'
         ]
 
-class SignupWithDetailsSerializer(serializers.ModelSerializer):
-    mot_de_passe         = serializers.CharField(write_only=True)
-    type_utilisateur     = serializers.ChoiceField(
-                              choices=Utilisateur.TYPE_UTILISATEUR_CHOICES,
-                              default='client'
-                          )
-    details_client       = DetailsClientSerializer(required=False, allow_null=True)
-    details_commercant   = DetailsCommercantSerializer(required=False, allow_null=True)
 
-    class Meta:
-        model  = Utilisateur
-        fields = [
-            'prenom','nom','email','telephone','type_utilisateur','mot_de_passe',
-            'details_client','details_commercant'
-        ]
+class SignupWithDetailsSerializer(serializers.Serializer):
+    email = serializers.EmailField(required=True)
+    telephone = serializers.CharField(required=True)
+    mot_de_passe = serializers.CharField(write_only=True, min_length=6)
+    role = serializers.ChoiceField(choices=[('client','Client'),('vendeur','Vendeur')])
+    details_client = DetailsClientSerializer(required=False)
+    details_commercant = DetailsCommercantSerializer(required=False)
+
+    def validate(self, data):
+        # un seul des deux doit être présent selon le rôle
+        if data['role'] == 'client' and 'details_client' not in data:
+            raise serializers.ValidationError("Les détails client sont obligatoires.")
+        if data['role'] == 'vendeur' and 'details_commercant' not in data:
+            raise serializers.ValidationError("Les détails commerçant sont obligatoires.")
+        return data
 
     def create(self, validated_data):
-        details_client_data     = validated_data.pop('details_client', None)
+        from django.contrib.auth.hashers import make_password
+        from .models import Utilisateur, DetailsClient, DetailsCommercant
+
+        details_client_data = validated_data.pop('details_client', None)
         details_commercant_data = validated_data.pop('details_commercant', None)
-        pwd                     = validated_data.pop('mot_de_passe')
-
-        # 1) Crée l’utilisateur
-        utilisateur = Utilisateur(**validated_data)
-        utilisateur.mot_de_passe = make_password(pwd)
-        utilisateur.save()
-
-        # 2) Crée les détails s’ils sont fournis
-        if details_client_data:
+        pwd = validated_data.pop('mot_de_passe')
+        utilisateur = Utilisateur.objects.create(
+            email=validated_data['email'],
+            telephone=validated_data['telephone'],
+            mot_de_passe=make_password(pwd),
+            type_utilisateur=validated_data['role']
+        )
+        # créer le profil associé
+        if utilisateur.type_utilisateur == 'client':
             DetailsClient.objects.create(utilisateur=utilisateur, **details_client_data)
-        if details_commercant_data:
-            DetailsCommercant.objects.create(utilisateur=utilisateur, **details_commercant_data)
-
+        else:
+            # on fixe est_verifie à False, note_moyenne à 0.00 par défaut
+            DetailsCommercant.objects.create(
+                utilisateur=utilisateur,
+                **details_commercant_data
+            )
         return utilisateur
+
 
 
 class ImageProduitSerializer(serializers.ModelSerializer):
