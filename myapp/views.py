@@ -1,10 +1,19 @@
 # myapp/views.py - VERSION FINALE COMPLÈTE ET CORRIGÉE ✅
 
 # Imports groupés et organisés
+# myapp/views.py - VERSION COMPLÈTE avec tous les ViewSets
+from rest_framework import viewsets, status
+from rest_framework.decorators import action
+from rest_framework.response import Response
+from django.db import transaction
+from .models import Produit, ImageProduit, SpecificationProduit, Utilisateur, PasswordResetToken
+from .serializers import ProduitSerializer, ImageProduitSerializer, SpecificationProduitSerializer , SignupSerializer, LoginSerializer
+import logging
 import os
 import uuid
 import logging
 import traceback
+from .models import DetailsClient,DetailCommande,DetailsCommercant
 
 from django.conf import settings
 from django.db import transaction
@@ -15,7 +24,8 @@ from rest_framework import viewsets, status
 from rest_framework.decorators import action, api_view
 from rest_framework.response import Response
 from rest_framework.permissions import AllowAny
-
+from django.conf import settings
+from .models import Utilisateur
 # Imports locaux
 from .models import (
     Produit, ImageProduit, SpecificationProduit, MouvementStock,
@@ -26,7 +36,495 @@ from .serializers import (
     MouvementStockSerializer, CategorieSerializer, NotificationSerializer,
     CommandeSerializer, DetailCommandeSerializer
 )
+from django.utils.decorators import method_decorator
+from rest_framework.decorators import api_view
+from rest_framework.response import Response
+from rest_framework import status
+import uuid
+from rest_framework.views import APIView
+logger = logging.getLogger(__name__)
+from rest_framework import viewsets
+# from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import AllowAny 
 from . import serializers
+from django.contrib.auth.hashers import check_password
+from django.db.models import Q
+from django.core.mail import send_mail
+from django.contrib.auth.hashers import make_password
+from google.oauth2 import id_token
+from google.auth.transport import requests as google_requests
+from django.db import transaction
+import requests
+from django.utils.crypto import get_random_string
+from .serializers import SignupWithDetailsSerializer
+from rest_framework.permissions import AllowAny
+from rest_framework.response import Response
+from rest_framework import status
+
+# À ajouter dans views.py - Vue SignupView simple
+class SignupView(APIView):
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        try:
+            print("🔍 DEBUG: SignupView simple")
+            
+            # Données de base
+            email = request.data.get('email')
+            mot_de_passe = request.data.get('mot_de_passe')
+            telephone = request.data.get('telephone')
+            
+            # Validations
+            if not email or not mot_de_passe:
+                return Response({
+                    'error': 'Email et mot de passe requis'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Vérification existence
+            if Utilisateur.objects.filter(email=email).exists():
+                return Response({
+                    'error': 'Un utilisateur avec cet email existe déjà'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Création utilisateur simple
+            utilisateur = Utilisateur(
+                email=email,
+                telephone=telephone or '',
+                type_utilisateur='client'  # Type par défaut
+            )
+            utilisateur.mot_de_passe = make_password(mot_de_passe)
+            utilisateur.save()
+            
+            return Response({
+                'message': 'Utilisateur créé avec succès',
+                'user_id': utilisateur.id_utilisateur
+            }, status=status.HTTP_201_CREATED)
+            
+        except Exception as e:
+            print(f"❌ SignupView error: {e}")
+            return Response({
+                'error': f'Erreur: {str(e)}'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class SignupWithDetailsView(APIView):
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        try:
+            print("🔍 DEBUG: Début signup-with-details")
+            print(f"🔍 DEBUG: Données reçues: {request.data}")
+            
+            # 1. Extraction des données principales
+            email = request.data.get('email')
+            mot_de_passe = request.data.get('mot_de_passe')
+            telephone = request.data.get('telephone')
+            role = request.data.get('role')
+            
+            print(f"🔍 DEBUG: email={email}, role={role}, telephone={telephone}")
+            
+            # 2. Validations de base
+            if not email or not mot_de_passe:
+                return Response({
+                    'error': 'Email et mot de passe requis'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            if not role or role not in ['client', 'vendeur', 'administrateur']:
+                return Response({
+                    'error': 'Rôle requis (client, vendeur ou administrateur)'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            # 3. Vérifier si l'utilisateur existe déjà
+            if Utilisateur.objects.filter(email=email).exists():
+                return Response({
+                    'error': 'Un utilisateur avec cet email existe déjà'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            # 4. Création avec transaction
+            with transaction.atomic():
+                print("🔍 DEBUG: Création de l'utilisateur...")
+                
+                # ✅ SOLUTION DE CONTOURNEMENT : Créer d'abord l'utilisateur
+                utilisateur = Utilisateur(
+                    email=email,
+                    telephone=telephone or '',
+                    type_utilisateur=role
+                )
+                
+                # Ajouter le mot de passe après création
+                utilisateur.mot_de_passe = make_password(mot_de_passe)
+                
+                # Sauvegarder
+                utilisateur.save()
+                
+                print(f"✅ DEBUG: Utilisateur créé avec ID: {utilisateur.id_utilisateur}")
+                
+                # 5. Traitement des détails selon le rôle
+                if role == 'client':
+                    details_client = request.data.get('details_client', {})
+                    print(f"🔍 DEBUG: Détails client: {details_client}")
+                    
+                    # Créer le profil client séparé
+                    if details_client:
+                        DetailsClient.objects.create(
+                            utilisateur=utilisateur,
+                            nom=details_client.get('nom', ''),
+                            prenom=details_client.get('prenom', ''),
+                            adresse=details_client.get('adresse', ''),
+                            ville=details_client.get('ville', ''),
+                            code_postal=details_client.get('code_postal', ''),
+                            pays=details_client.get('pays', ''),
+                        )
+                        print("✅ DEBUG: Profil client créé")
+                    
+                elif role == 'vendeur':  # Note: 'commercant' -> 'vendeur' selon votre modèle
+                    details_commercant = request.data.get('details_commercant', {})
+                    print(f"🔍 DEBUG: Détails commerçant: {details_commercant}")
+                    
+                    # Créer le profil commerçant séparé
+                    if details_commercant:
+                        DetailsCommercant.objects.create(
+                            utilisateur=utilisateur,
+                            nom_boutique=details_commercant.get('nom_boutique', ''),
+                            description_boutique=details_commercant.get('description_boutique', ''),
+                            adresse_commerciale=details_commercant.get('adresse_commerciale', ''),
+                            ville=details_commercant.get('ville', ''),
+                            code_postal=details_commercant.get('code_postal', ''),
+                            pays=details_commercant.get('pays', ''),
+                            est_verifie=False,
+                            note_moyenne=0.00,
+                            commission_rate=details_commercant.get('commission_rate', 5.0),
+                        )
+                        print("✅ DEBUG: Profil commerçant créé")
+                
+                print("✅ DEBUG: Inscription réussie")
+                return Response({
+                    'message': 'Inscription réussie',
+                    'user_id': utilisateur.id_utilisateur,
+                    'email': utilisateur.email,
+                    'role': utilisateur.type_utilisateur
+                }, status=status.HTTP_201_CREATED)
+                
+        except Exception as e:
+            print(f"❌ DEBUG: Erreur générale: {e}")
+            print(f"❌ DEBUG: Traceback: {traceback.format_exc()}")
+            return Response({
+                'error': f'Erreur interne: {str(e)}',
+                'debug': traceback.format_exc() if settings.DEBUG else None
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+class LoginView(APIView):
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        serializer = LoginSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        identifiant = serializer.validated_data['identifiant']
+        mot_de_passe = serializer.validated_data['mot_de_passe']
+
+        try:
+            utilisateur = Utilisateur.objects.get(
+                Q(email=identifiant) | Q(telephone=identifiant)
+            )
+        except Utilisateur.DoesNotExist:
+            return Response({"error": "Identifiant ou mot de passe incorrect."}, status=401)
+
+        if not check_password(mot_de_passe, utilisateur.mot_de_passe):
+            return Response({"error": "Identifiant ou mot de passe incorrect."}, status=401)
+
+        # Ne pas utiliser login() ici, faire une session manuelle
+        request.session['user_id'] = utilisateur.id_utilisateur  # stocker l'id dans la session
+
+        return Response({"message": "Connexion réussie"}, status=200)
+
+
+
+# Dans views.py - Vue SignupWithDetails corrigée
+from rest_framework.views import APIView
+from rest_framework.permissions import AllowAny
+from rest_framework.response import Response
+from rest_framework import status
+from django.db import transaction
+from django.contrib.auth.hashers import make_password
+import traceback
+import json
+
+class SignupWithDetailsView(APIView):
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        try:
+            print("🔍 DEBUG: Début signup-with-details")
+            print(f"🔍 DEBUG: Données reçues: {request.data}")
+            
+            # 1. Extraction des données principales
+            email = request.data.get('email')
+            mot_de_passe = request.data.get('mot_de_passe')
+            telephone = request.data.get('telephone')
+            role = request.data.get('role')
+            
+            print(f"🔍 DEBUG: email={email}, role={role}, telephone={telephone}")
+            
+            # 2. Validations de base
+            if not email or not mot_de_passe:
+                return Response({
+                    'error': 'Email et mot de passe requis'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            if not role or role not in ['client', 'commercant']:
+                return Response({
+                    'error': 'Rôle requis (client ou commercant)'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            # 3. Vérifier si l'utilisateur existe déjà
+            if Utilisateur.objects.filter(email=email).exists():
+                return Response({
+                    'error': 'Un utilisateur avec cet email existe déjà'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            # 4. Création avec transaction
+            with transaction.atomic():
+                print("🔍 DEBUG: Création de l'utilisateur...")
+                
+                # Créer l'utilisateur principal
+                utilisateur = Utilisateur.objects.create(
+                    email=email,
+                    mot_de_passe=make_password(mot_de_passe),
+                    telephone=telephone or '',
+                    type_utilisateur=role
+                )
+                
+                print(f"✅ DEBUG: Utilisateur créé avec ID: {utilisateur.id_utilisateur}")
+                
+                # 5. Traitement des détails selon le rôle
+                if role == 'client':
+                    details_client = request.data.get('details_client', {})
+                    print(f"🔍 DEBUG: Détails client: {details_client}")
+                    
+                    # Mettre à jour les champs utilisateur avec les détails client
+                    if details_client.get('nom'):
+                        utilisateur.nom = details_client['nom']
+                    if details_client.get('prenom'):
+                        utilisateur.prenom = details_client['prenom']
+                    
+                    # Si vous avez un modèle DetailsClient séparé, créez-le ici
+                    # DetailsClient.objects.create(
+                    #     utilisateur=utilisateur,
+                    #     adresse=details_client.get('adresse', ''),
+                    #     ville=details_client.get('ville', ''),
+                    #     code_postal=details_client.get('code_postal', ''),
+                    #     pays=details_client.get('pays', ''),
+                    # )
+                    
+                elif role == 'commercant':
+                    details_commercant = request.data.get('details_commercant', {})
+                    print(f"🔍 DEBUG: Détails commerçant: {details_commercant}")
+                    
+                    # Si vous avez un modèle DetailsCommercant, créez-le ici
+                    # DetailsCommercant.objects.create(
+                    #     utilisateur=utilisateur,
+                    #     nom_boutique=details_commercant.get('nom_boutique', ''),
+                    #     description_boutique=details_commercant.get('description_boutique', ''),
+                    #     adresse_commerciale=details_commercant.get('adresse_commerciale', ''),
+                    #     ville=details_commercant.get('ville', ''),
+                    #     code_postal=details_commercant.get('code_postal', ''),
+                    #     pays=details_commercant.get('pays', ''),
+                    #     est_verifie=False,
+                    #     note_moyenne=0.0,
+                    #     commission_rate=details_commercant.get('commission_rate', 5.0),
+                    # )
+                
+                # Sauvegarder les modifications
+                utilisateur.save()
+                
+                print("✅ DEBUG: Inscription réussie")
+                return Response({
+                    'message': 'Inscription réussie',
+                    'user_id': utilisateur.id_utilisateur,
+                    'email': utilisateur.email,
+                    'role': utilisateur.type_utilisateur
+                }, status=status.HTTP_201_CREATED)
+                
+        except json.JSONDecodeError as e:
+            print(f"❌ DEBUG: Erreur JSON: {e}")
+            return Response({
+                'error': 'Format JSON invalide'
+            }, status=status.HTTP_400_BAD_REQUEST)
+            
+        except Exception as e:
+            print(f"❌ DEBUG: Erreur générale: {e}")
+            print(f"❌ DEBUG: Traceback: {traceback.format_exc()}")
+            return Response({
+                'error': f'Erreur interne: {str(e)}',
+                'debug': traceback.format_exc() if settings.DEBUG else None
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class RequestPasswordResetView(APIView):
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        email = request.data.get('email')
+        if not email:
+            return Response({"error": "Email requis"}, status=400)
+
+        try:
+            utilisateur = Utilisateur.objects.get(email=email)
+        except Utilisateur.DoesNotExist:
+            return Response({"error": "Email non trouvé"}, status=404)
+
+        # Créer un token
+        token_obj = PasswordResetToken.objects.create(utilisateur=utilisateur)
+
+        # Construire URL de reset (à adapter à ton frontend)
+        reset_url = f"https://localhost:5173/reset-password/{token_obj.token}"
+
+        # Envoyer email
+        send_mail(
+            "Réinitialisation du mot de passe",
+            f"Pour réinitialiser votre mot de passe, cliquez sur ce lien : {reset_url}",
+            "no-reply@tonapp.com",
+            [email],
+        )
+
+        return Response({"message": "Email envoyé si compte existant"}, status=200)
+
+
+
+class ResetPasswordView(APIView):
+    permission_classes = [AllowAny]
+
+    def post(self, request, token):
+        mot_de_passe = request.data.get('mot_de_passe')
+        if not mot_de_passe:
+            return Response({"error": "Mot de passe requis"}, status=400)
+
+        try:
+            token_obj = PasswordResetToken.objects.get(token=token)
+        except PasswordResetToken.DoesNotExist:
+            return Response({"error": "Token invalide"}, status=404)
+
+        if token_obj.is_expired():
+            return Response({"error": "Token expiré"}, status=400)
+
+        utilisateur = token_obj.utilisateur
+        utilisateur.mot_de_passe = make_password(mot_de_passe)
+        utilisateur.save()
+
+        # Supprimer ou invalider le token
+        token_obj.delete()
+
+        return Response({"message": "Mot de passe réinitialisé avec succès"}, status=200)
+
+
+
+
+class GoogleLoginView(APIView):
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        token = request.data.get("token")
+        if not token:
+            return Response({"error": "Token requis"}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            # Valider le token Google et récupérer les infos utilisateur
+            idinfo = id_token.verify_oauth2_token(token, google_requests.Request(), "128897548037-fi6qsoqngat2rg46apt6pq6tfspbfcp3.apps.googleusercontent.com")
+
+            # idinfo contient les infos utilisateur validées
+            email = idinfo.get("email")
+            nom = idinfo.get("family_name") or ""
+            prenom = idinfo.get("given_name") or ""
+            google_sub = idinfo.get("sub")  # id Google unique
+
+            if not email:
+                return Response({"error": "Email non trouvé dans le token"}, status=status.HTTP_400_BAD_REQUEST)
+
+            # Recherche ou création utilisateur dans ta base
+            with transaction.atomic():
+                telephone_temporaire = f"google_{get_random_string(length=10)}"
+                utilisateur, created = Utilisateur.objects.get_or_create(
+                    email=email,
+                    defaults={
+                        "nom": nom,
+                        "prenom": prenom,
+                        "telephone": telephone_temporaire,  # tu peux gérer ça comme tu veux
+                        "mot_de_passe": make_password(google_sub),  # hash d'une valeur unique Google
+                        "type_utilisateur": "vendeur",  # ou ce que tu veux par défaut
+                    },
+                )
+
+            # Ici tu peux créer une session manuelle ou un JWT selon ton auth backend
+            request.session['user_id'] = utilisateur.id_utilisateur
+
+            return Response({
+                "message": "Connexion Google réussie",
+                "user": {
+                    "email": utilisateur.email,
+                    "nom": utilisateur.nom,
+                    "prenom": utilisateur.prenom,
+                }
+            }, status=status.HTTP_200_OK)
+
+        # except ValueError:
+        #     # Token invalide
+        #     return Response({"error": "Token invalide"}, status=status.HTTP_400_BAD_REQUEST)
+        except ValueError as e:
+            import traceback
+            print("Erreur Google token :", e)
+            traceback.print_exc()
+            return Response({"error": f"Token invalide : {str(e)}"}, status=status.HTTP_400_BAD_REQUEST)
+
+
+
+
+class FacebookLoginView(APIView):
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        access_token = request.data.get("access_token")
+        email = request.data.get("email")
+
+        if not access_token or not email:
+            return Response({"error": "Token et email requis"}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Valider le token Facebook
+        url = f'https://graph.facebook.com/me?access_token={access_token}&fields=email,name'
+        response = requests.get(url)
+        if response.status_code != 200:
+            return Response({"error": "Token Facebook invalide"}, status=status.HTTP_400_BAD_REQUEST)
+
+        facebook_data = response.json()
+        name = facebook_data.get("name")
+        if not name:
+            return Response({"error": "Nom non trouvé dans le token"}, status=status.HTTP_400_BAD_REQUEST)
+
+        with transaction.atomic():
+            utilisateur, created = Utilisateur.objects.get_or_create(email=email)
+            # Met à jour les infos à chaque login Facebook
+            utilisateur.nom = name.split(" ")[-1]
+            utilisateur.prenom = " ".join(name.split(" ")[:-1])
+            if not utilisateur.telephone:
+                utilisateur.telephone = ""  # ou une valeur par défaut si tu veux
+            utilisateur.mot_de_passe = make_password(email)  # idéalement, un mot de passe généré ou token
+            if not utilisateur.type_utilisateur:
+                utilisateur.type_utilisateur = "vendeur"
+            utilisateur.save()
+
+        return Response({
+            "message": "Connexion Facebook réussie",
+            "created": created,
+            "user": {
+                "email": utilisateur.email,
+                "nom": utilisateur.nom,
+                "prenom": utilisateur.prenom,
+                "telephone": utilisateur.telephone,
+                "type_utilisateur": utilisateur.type_utilisateur,
+            }
+        }, status=status.HTTP_200_OK)
+
+
 
 # Configuration du logger
 logger = logging.getLogger(__name__)

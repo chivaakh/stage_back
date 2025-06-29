@@ -25,6 +25,7 @@ def api_info(request):
 urlpatterns = [
     path('', api_info, name='api-info'),
     path('admin/', admin.site.urls),
+    path('', include('myapp.urls')),
     path('api/', include('myapp.urls')),
 ]
 

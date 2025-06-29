@@ -1,5 +1,96 @@
 from rest_framework import serializers
-from .models import Produit, ImageProduit, SpecificationProduit
+from .models import Produit, ImageProduit, SpecificationProduit, Utilisateur
+from django.contrib.auth.hashers import make_password
+from rest_framework import serializers
+from django.contrib.auth.hashers import make_password
+from .models import Utilisateur, DetailsClient, DetailsCommercant
+
+
+class SignupSerializer(serializers.ModelSerializer):
+    prenom = serializers.CharField(write_only=True, required=True)
+    nom = serializers.CharField(required=False, allow_blank=True)
+    mot_de_passe = serializers.CharField(write_only=True, required=True, min_length=6)
+    email = serializers.EmailField(required=False, allow_blank=True)
+    telephone = serializers.CharField(required=True)
+
+    class Meta:
+        model = Utilisateur
+        fields = ['nom', 'prenom', 'email', 'telephone', 'mot_de_passe']
+
+    def validate(self, data):
+        if not data.get('email') and not data.get('telephone'):
+            raise serializers.ValidationError("Email ou téléphone doit être renseigné.")
+        return data
+
+    def create(self, validated_data):
+        mot_de_passe = validated_data.pop('mot_de_passe')
+        utilisateur = Utilisateur(**validated_data)
+        utilisateur.mot_de_passe = make_password(mot_de_passe)
+        utilisateur.type_utilisateur = 'vendeur'
+        try:
+            utilisateur.save()
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            raise serializers.ValidationError({"non_field_errors": [str(e)]})
+        return utilisateur
+
+
+
+
+class LoginSerializer(serializers.Serializer):
+    identifiant = serializers.CharField(required=True)  # email ou téléphone
+    mot_de_passe = serializers.CharField(required=True, write_only=True)
+
+
+class DetailsClientSerializer(serializers.ModelSerializer):
+    class Meta:
+        model  = DetailsClient
+        fields = ['nom','prenom','adresse','ville','code_postal','pays']
+
+class DetailsCommercantSerializer(serializers.ModelSerializer):
+    class Meta:
+        model  = DetailsCommercant
+        fields = [
+            'nom_boutique','description_boutique','adresse_commerciale',
+            'ville','code_postal','pays','est_verifie','note_moyenne',
+            'commission_rate'
+        ]
+
+class SignupWithDetailsSerializer(serializers.ModelSerializer):
+    mot_de_passe         = serializers.CharField(write_only=True)
+    type_utilisateur     = serializers.ChoiceField(
+                              choices=Utilisateur.TYPE_UTILISATEUR_CHOICES,
+                              default='client'
+                          )
+    details_client       = DetailsClientSerializer(required=False, allow_null=True)
+    details_commercant   = DetailsCommercantSerializer(required=False, allow_null=True)
+
+    class Meta:
+        model  = Utilisateur
+        fields = [
+            'prenom','nom','email','telephone','type_utilisateur','mot_de_passe',
+            'details_client','details_commercant'
+        ]
+
+    def create(self, validated_data):
+        details_client_data     = validated_data.pop('details_client', None)
+        details_commercant_data = validated_data.pop('details_commercant', None)
+        pwd                     = validated_data.pop('mot_de_passe')
+
+        # 1) Crée l’utilisateur
+        utilisateur = Utilisateur(**validated_data)
+        utilisateur.mot_de_passe = make_password(pwd)
+        utilisateur.save()
+
+        # 2) Crée les détails s’ils sont fournis
+        if details_client_data:
+            DetailsClient.objects.create(utilisateur=utilisateur, **details_client_data)
+        if details_commercant_data:
+            DetailsCommercant.objects.create(utilisateur=utilisateur, **details_commercant_data)
+
+        return utilisateur
+
 
 class ImageProduitSerializer(serializers.ModelSerializer):
     class Meta:
@@ -178,134 +269,5 @@ class CommandeSerializer(serializers.ModelSerializer):
                 DetailCommande.objects.create(commande=instance, **detail_data)
 
         return instance
-
-
-# from rest_framework import serializers
-# from .models import (
-#     Utilisateur, ImageUtilisateur, DetailsClient, DetailsCommercant,
-#     Categorie, Produit, ImageProduit, SpecificationProduit,
-#     Commande, DetailCommande, Avis, Panier, Favori,
-#     MouvementStock, JournalAdmin
-# )
-
-# class ProduitDetailSerializer(serializers.ModelSerializer):
-#     image_principale = serializers.SerializerMethodField()
-#     prix = serializers.SerializerMethodField()
-#     prix_promo = serializers.SerializerMethodField()
-#     en_stock = serializers.SerializerMethodField()
-
-#     class Meta:
-#         model = Produit
-#         fields = ['id', 'nom', 'description', 'image_principale', 'prix', 'prix_promo', 'en_stock']
-
-#     def get_image_principale(self, obj):
-#         image = obj.imageproduit_set.filter(est_principale=True).first()
-#         return image.url_image if image else None
-
-#     def get_prix(self, obj):
-#         spec = obj.specificationproduit_set.filter(est_defaut=True).first()
-#         return spec.prix if spec else None
-
-#     def get_prix_promo(self, obj):
-#         spec = obj.specificationproduit_set.filter(est_defaut=True).first()
-#         return spec.prix_promo if spec and spec.prix_promo else None
-
-#     def get_en_stock(self, obj):
-#         spec = obj.specificationproduit_set.filter(est_defaut=True).first()
-#         return spec.quantite_stock > 0 if spec else False
-
-
-# class ImageUtilisateurSerializer(serializers.ModelSerializer):
-#     class Meta:
-#         model = ImageUtilisateur
-#         fields = '__all__'
-
-
-# class UtilisateurSerializer(serializers.ModelSerializer):
-#     class Meta:
-#         model = Utilisateur
-#         fields = ['id', 'email', 'telephone', 'date_inscription', 'derniere_connexion', 'est_actif', 'role']
-
-
-# class DetailsClientSerializer(serializers.ModelSerializer):
-#     utilisateur = UtilisateurSerializer()
-#     photo_profil = ImageUtilisateurSerializer(allow_null=True)
-
-#     class Meta:
-#         model = DetailsClient
-#         fields = '__all__'
-
-
-# class DetailsCommercantSerializer(serializers.ModelSerializer):
-#     utilisateur = UtilisateurSerializer()
-#     logo = ImageUtilisateurSerializer(allow_null=True)
-
-#     class Meta:
-#         model = DetailsCommercant
-#         fields = '__all__'
-
-
-# class CategorieSerializer(serializers.ModelSerializer):
-#     class Meta:
-#         model = Categorie
-#         fields = '__all__'
-
-
-# class ProduitSerializer(serializers.ModelSerializer):
-#     class Meta:
-#         model = Produit
-#         fields = '__all__'
-
-
-# class ImageProduitSerializer(serializers.ModelSerializer):
-#     class Meta:
-#         model = ImageProduit
-#         fields = '__all__'
-
-
-# class SpecificationProduitSerializer(serializers.ModelSerializer):
-#     class Meta:
-#         model = SpecificationProduit
-#         fields = '__all__'
-
-
-# class CommandeSerializer(serializers.ModelSerializer):
-#     class Meta:
-#         model = Commande
-#         fields = '__all__'
-
-
-# class DetailCommandeSerializer(serializers.ModelSerializer):
-#     class Meta:
-#         model = DetailCommande
-#         fields = '__all__'
-
-
-# class AvisSerializer(serializers.ModelSerializer):
-#     class Meta:
-#         model = Avis
-#         fields = '__all__'
-
-
-# class PanierSerializer(serializers.ModelSerializer):
-#     class Meta:
-#         model = Panier
-#         fields = '__all__'
-
-
-# class FavoriSerializer(serializers.ModelSerializer):
-#     class Meta:
-#         model = Favori
-#         fields = '__all__'
-
-
-# class MouvementStockSerializer(serializers.ModelSerializer):
-#     class Meta:
-#         model = MouvementStock
-#         fields = '__all__'
-
-
-# class JournalAdminSerializer(serializers.ModelSerializer):
-#     class Meta:
-#         model = JournalAdmin
-#         fields = '__all__'
+    
+    

@@ -30,7 +30,9 @@ ALLOWED_HOSTS = [
     '127.0.0.1',
     '10.0.2.2',        # Émulateur Android
     '192.168.100.9',   # Votre IP locale Wi-Fi
-    '192.168.56.1',    # Votre IP Ethernet (VirtualBox/VMware)
+    '192.168.56.1', # Votre IP Ethernet (VirtualBox/VMware)
+    '192.168.100.79',
+    
 ]
 
 
@@ -64,12 +66,14 @@ MIDDLEWARE = [
 ]
 # CORS config - autorise localhost:5173 uniquement
 CORS_ALLOWED_ORIGINS = [
+    "https://localhost:5173",
     "http://localhost:5173",
     "http://localhost:8000",       # Django dev server
     "http://127.0.0.1:8000",       # Django dev server
     "http://10.0.2.2:8000",        # Émulateur Android
     "http://192.168.100.9:8000",   # Device physique (votre IP Wi-Fi)
-    "http://192.168.56.1:8000",    # Si vous utilisez VirtualBox/VMware
+    "http://192.168.56.1:8000",
+    "http://192.168.100.79:8000",     # Si vous utilisez VirtualBox/VMware
 ]
 
 # Optionnel : si besoin de cookies, sessions cross-origin
@@ -115,7 +119,6 @@ REST_FRAMEWORK = {
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
     'PAGE_SIZE': 10,
 }
-
 
 
 
@@ -181,7 +184,7 @@ AUTH_PASSWORD_VALIDATORS = [
 ]
 
 # Ajoutez cette ligne à settings.py
-AUTH_USER_MODEL = 'myapp.Utilisateur'
+# AUTH_USER_MODEL = 'myapp.Utilisateur'
 # Internationalization
 # https://docs.djangoproject.com/en/4.2/topics/i18n/
 
@@ -215,6 +218,19 @@ os.makedirs(os.path.join(MEDIA_ROOT, 'uploads', 'images'), exist_ok=True)
 # https://docs.djangoproject.com/en/4.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+
+SESSION_COOKIE_AGE = 1209600
+
+
+EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+EMAIL_HOST = 'smtp.gmail.com'
+EMAIL_PORT = 587
+EMAIL_USE_TLS = True
+EMAIL_HOST_USER = 'minolilo07@gmail.com'
+EMAIL_HOST_PASSWORD = 'ywov tkrc qltz gtda'
+DEFAULT_FROM_EMAIL = 'no-reply@Ishrili.com'
+
 
 # Configuration pour les logs (utile pour débugger les appels API)
 LOGGING = {
