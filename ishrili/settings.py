@@ -59,6 +59,9 @@ MIDDLEWARE = [
 # CORS config - autorise localhost:5173 uniquement
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",
+    "https://localhost:5173",  # <-- ajoute cette ligne
+
+    
 ]
 
 # Optionnel : si besoin de cookies, sessions cross-origin
