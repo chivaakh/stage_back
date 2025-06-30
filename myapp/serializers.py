@@ -4,243 +4,105 @@
 # myapp/serializers_client.py - Serializers spécifiques aux clients
 
 from rest_framework import serializers
-from .models import (
-    Produit, ImageProduit, SpecificationProduit, Categorie,
-    Panier, Favori, Commande, DetailCommande, Avis,
-    DetailsClient, Utilisateur, TrackingCommande
-)
+from .models import Produit, ImageProduit, SpecificationProduit, TrackingCommande, Utilisateur
+from django.contrib.auth.hashers import make_password
+from rest_framework import serializers
+from django.contrib.auth.hashers import make_password
+from .models import Utilisateur, DetailsClient, DetailsCommercant
 
-class ClientCategorieSerializer(serializers.ModelSerializer):
-    """Serializer pour les catégories côté client"""
-    nombre_produits = serializers.SerializerMethodField()
-    
-    class Meta:
-        model = Categorie
-        fields = ['id', 'nom', 'description', 'nombre_produits']
-    
-    def get_nombre_produits(self, obj):
-        return obj.produit_set.count()
 
-class ClientImageProduitSerializer(serializers.ModelSerializer):
-    """Serializer pour les images produit côté client"""
-    class Meta:
-        model = ImageProduit
-        fields = ['id', 'url_image', 'est_principale', 'ordre']
+class SignupSerializer(serializers.ModelSerializer):
+    prenom = serializers.CharField(write_only=True, required=True)
+    nom = serializers.CharField(required=False, allow_blank=True)
+    mot_de_passe = serializers.CharField(write_only=True, required=True, min_length=6)
+    email = serializers.EmailField(required=False, allow_blank=True)
+    telephone = serializers.CharField(required=True)
 
-class ClientSpecificationProduitSerializer(serializers.ModelSerializer):
-    """Serializer pour les spécifications produit côté client"""
-    prix_affichage = serializers.SerializerMethodField()
-    en_stock = serializers.SerializerMethodField()
-    
     class Meta:
-        model = SpecificationProduit
-        fields = [
-            'id', 'nom', 'description', 'prix', 'prix_promo',
-            'quantite_stock', 'est_defaut', 'reference_specification',
-            'prix_affichage', 'en_stock'
-        ]
-    
-    def get_prix_affichage(self, obj):
-        return obj.prix_promo if obj.prix_promo else obj.prix
-    
-    def get_en_stock(self, obj):
-        return obj.quantite_stock > 0
+        model = Utilisateur
+        fields = ['nom', 'prenom', 'email', 'telephone', 'mot_de_passe']
 
-class ClientProduitSerializer(serializers.ModelSerializer):
-    """Serializer pour les produits côté client avec toutes les infos nécessaires"""
-    images = ClientImageProduitSerializer(source='imageproduit_set', many=True, read_only=True)
-    specifications = ClientSpecificationProduitSerializer(source='specificationproduit_set', many=True, read_only=True)
-    categorie_nom = serializers.CharField(source='categorie.nom', read_only=True)
-    commercant_nom = serializers.CharField(source='commercant.nom_boutique', read_only=True)
-    prix_min = serializers.SerializerMethodField()
-    prix_max = serializers.SerializerMethodField()
-    image_principale = serializers.SerializerMethodField()
-    note_moyenne = serializers.SerializerMethodField()
-    nombre_avis = serializers.SerializerMethodField()
-    
-    class Meta:
-        model = Produit
-        fields = [
-            'id', 'reference', 'nom', 'description', 'categorie_nom',
-            'commercant_nom', 'images', 'specifications', 'prix_min',
-            'prix_max', 'image_principale', 'note_moyenne', 'nombre_avis'
-        ]
-    
-    def get_prix_min(self, obj):
-        specs = obj.specificationproduit_set.all()
-        if not specs:
-            return 0
-        return min(spec.prix_promo or spec.prix for spec in specs)
-    
-    def get_prix_max(self, obj):
-        specs = obj.specificationproduit_set.all()
-        if not specs:
-            return 0
-        return max(spec.prix_promo or spec.prix for spec in specs)
-    
-    def get_image_principale(self, obj):
-        image_principale = obj.imageproduit_set.filter(est_principale=True).first()
-        if image_principale:
-            return image_principale.url_image
-        premiere_image = obj.imageproduit_set.first()
-        return premiere_image.url_image if premiere_image else None
-    
-    def get_note_moyenne(self, obj):
-        avis = obj.avis_set.all()
-        if not avis:
-            return 0
-        return sum(avis_item.note for avis_item in avis) / len(avis)
-    
-    def get_nombre_avis(self, obj):
-        return obj.avis_set.count()
-
-class PanierSerializer(serializers.ModelSerializer):
-    """Serializer pour le panier"""
-    produit = serializers.SerializerMethodField()
-    specification_details = ClientSpecificationProduitSerializer(source='specification', read_only=True)
-    sous_total = serializers.SerializerMethodField()
-    
-    class Meta:
-        model = Panier
-        fields = [
-            'id', 'quantite', 'date_ajout', 'produit',
-            'specification_details', 'sous_total'
-        ]
-    
-    def get_produit(self, obj):
-        return {
-            'id': obj.specification.produit.id,
-            'nom': obj.specification.produit.nom,
-            'image_principale': self._get_image_principale(obj.specification.produit)
-        }
-    
-    def _get_image_principale(self, produit):
-        image = produit.imageproduit_set.filter(est_principale=True).first()
-        return image.url_image if image else None
-    
-    def get_sous_total(self, obj):
-        prix = obj.specification.prix_promo or obj.specification.prix
-        return prix * obj.quantite
-
-class PanierCreateSerializer(serializers.ModelSerializer):
-    """Serializer pour créer/modifier un article dans le panier"""
-    class Meta:
-        model = Panier
-        fields = ['specification', 'quantite']
-    
-    def validate_quantite(self, value):
-        if value <= 0:
-            raise serializers.ValidationError("La quantité doit être positive")
-        return value
-    
     def validate(self, data):
-        specification = data['specification']
-        quantite = data['quantite']
-        
-        if specification.quantite_stock < quantite:
-            raise serializers.ValidationError(
-                f"Stock insuffisant. Disponible: {specification.quantite_stock}"
-            )
+        if not data.get('email') and not data.get('telephone'):
+            raise serializers.ValidationError("Email ou téléphone doit être renseigné.")
         return data
 
-class FavoriSerializer(serializers.ModelSerializer):
-    """Serializer pour les favoris"""
-    produit = ClientProduitSerializer(read_only=True)
-    
-    class Meta:
-        model = Favori
-        fields = ['id', 'produit', 'date_ajout']
-
-class AvisSerializer(serializers.ModelSerializer):
-    """Serializer pour les avis"""
-    client_nom = serializers.SerializerMethodField()
-    
-    class Meta:
-        model = Avis
-        fields = [
-            'id', 'note', 'commentaire', 'date_creation', 'client_nom'
-        ]
-        read_only_fields = ['date_creation']
-    
-    def get_client_nom(self, obj):
-        return f"{obj.client.prenom} {obj.client.nom[0]}."
-
-class AvisCreateSerializer(serializers.ModelSerializer):
-    """Serializer pour créer un avis"""
-    class Meta:
-        model = Avis
-        fields = ['produit', 'note', 'commentaire']
-    
-    def validate_note(self, value):
-        if not 1 <= value <= 5:
-            raise serializers.ValidationError("La note doit être entre 1 et 5")
-        return value
-
-class ClientCommandeSerializer(serializers.ModelSerializer):
-    """Serializer pour les commandes côté client"""
-    details = serializers.SerializerMethodField()
-    statut_display = serializers.SerializerMethodField()
-    
-    class Meta:
-        model = Commande
-        fields = [
-            'id', 'date_commande', 'montant_total', 'statut',
-            'statut_display', 'details'
-        ]
-    
-    def get_details(self, obj):
-        details = obj.detailcommande_set.all()
-        return [{
-            'produit_nom': detail.specification.produit.nom,
-            'specification_nom': detail.specification.nom,
-            'quantite': detail.quantite,
-            'prix_unitaire': detail.prix_unitaire,
-            'sous_total': detail.quantite * detail.prix_unitaire
-        } for detail in details]
-    
-    def get_statut_display(self, obj):
-        statuts = {
-            'en_attente': 'En attente',
-            'confirmee': 'Confirmée',
-            'en_preparation': 'En préparation',
-            'expediee': 'Expédiée',
-            'livree': 'Livrée',
-            'annulee': 'Annulée'
-        }
-        return statuts.get(obj.statut, obj.statut)
-
-class CommandeCreateSerializer(serializers.Serializer):
-    """Serializer pour créer une commande depuis le panier"""
-    adresse_livraison = serializers.CharField(max_length=500)
-    
-    def validate(self, data):
-        # Récupérer le client depuis le contexte
-        request = self.context.get('request')
-        if not request or not hasattr(request, 'user'):
-            raise serializers.ValidationError("Utilisateur non authentifié")
-        
-        # Vérifier que le panier n'est pas vide
+    def create(self, validated_data):
+        mot_de_passe = validated_data.pop('mot_de_passe')
+        utilisateur = Utilisateur(**validated_data)
+        utilisateur.mot_de_passe = make_password(mot_de_passe)
+        utilisateur.type_utilisateur = 'vendeur'
         try:
-            client = request.user.detailsclient
-            panier_items = Panier.objects.filter(client=client)
-            if not panier_items.exists():
-                raise serializers.ValidationError("Le panier est vide")
-        except:
-            raise serializers.ValidationError("Client non trouvé")
-        
-        return data
+            utilisateur.save()
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            raise serializers.ValidationError({"non_field_errors": [str(e)]})
+        return utilisateur
+
+
+
+
+class LoginSerializer(serializers.Serializer):
+    identifiant = serializers.CharField(required=True)  # email ou téléphone
+    mot_de_passe = serializers.CharField(required=True, write_only=True)
+
+
 
 class DetailsClientSerializer(serializers.ModelSerializer):
-    """Serializer pour les détails du client"""
-    email = serializers.CharField(source='utilisateur.email', read_only=True)
-    telephone = serializers.CharField(source='utilisateur.telephone', read_only=True)
-    
     class Meta:
         model = DetailsClient
+        fields = ['nom', 'prenom', 'adresse', 'ville', 'code_postal', 'pays']
+
+class DetailsCommercantSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = DetailsCommercant
         fields = [
-            'nom', 'prenom', 'adresse', 'ville', 'code_postal',
-            'pays', 'email', 'telephone'
+            'nom_boutique', 'description_boutique', 'adresse_commerciale',
+            'ville', 'code_postal', 'pays', 'commission_rate'
         ]
+
+
+class SignupWithDetailsSerializer(serializers.Serializer):
+    email = serializers.EmailField(required=True)
+    telephone = serializers.CharField(required=True)
+    mot_de_passe = serializers.CharField(write_only=True, min_length=6)
+    role = serializers.ChoiceField(choices=[('client','Client'),('vendeur','Vendeur')])
+    details_client = DetailsClientSerializer(required=False)
+    details_commercant = DetailsCommercantSerializer(required=False)
+
+    def validate(self, data):
+        # un seul des deux doit être présent selon le rôle
+        if data['role'] == 'client' and 'details_client' not in data:
+            raise serializers.ValidationError("Les détails client sont obligatoires.")
+        if data['role'] == 'vendeur' and 'details_commercant' not in data:
+            raise serializers.ValidationError("Les détails commerçant sont obligatoires.")
+        return data
+
+    def create(self, validated_data):
+        from django.contrib.auth.hashers import make_password
+        from .models import Utilisateur, DetailsClient, DetailsCommercant
+
+        details_client_data = validated_data.pop('details_client', None)
+        details_commercant_data = validated_data.pop('details_commercant', None)
+        pwd = validated_data.pop('mot_de_passe')
+        utilisateur = Utilisateur.objects.create(
+            email=validated_data['email'],
+            telephone=validated_data['telephone'],
+            mot_de_passe=make_password(pwd),
+            type_utilisateur=validated_data['role']
+        )
+        # créer le profil associé
+        if utilisateur.type_utilisateur == 'client':
+            DetailsClient.objects.create(utilisateur=utilisateur, **details_client_data)
+        else:
+            # on fixe est_verifie à False, note_moyenne à 0.00 par défaut
+            DetailsCommercant.objects.create(
+                utilisateur=utilisateur,
+                **details_commercant_data
+            )
+        return utilisateur
+
 
 
 class ImageProduitSerializer(serializers.ModelSerializer):
@@ -428,136 +290,5 @@ class CommandeSerializer(serializers.ModelSerializer):
                 DetailCommande.objects.create(commande=instance, **detail_data)
 
         return instance
-
-
-
-    # ... gardez vos méthodes existantes get_client_nom, etc.
-# from rest_framework import serializers
-# from .models import (
-#     Utilisateur, ImageUtilisateur, DetailsClient, DetailsCommercant,
-#     Categorie, Produit, ImageProduit, SpecificationProduit,
-#     Commande, DetailCommande, Avis, Panier, Favori,
-#     MouvementStock, JournalAdmin
-# )
-
-# class ProduitDetailSerializer(serializers.ModelSerializer):
-#     image_principale = serializers.SerializerMethodField()
-#     prix = serializers.SerializerMethodField()
-#     prix_promo = serializers.SerializerMethodField()
-#     en_stock = serializers.SerializerMethodField()
-
-#     class Meta:
-#         model = Produit
-#         fields = ['id', 'nom', 'description', 'image_principale', 'prix', 'prix_promo', 'en_stock']
-
-#     def get_image_principale(self, obj):
-#         image = obj.imageproduit_set.filter(est_principale=True).first()
-#         return image.url_image if image else None
-
-#     def get_prix(self, obj):
-#         spec = obj.specificationproduit_set.filter(est_defaut=True).first()
-#         return spec.prix if spec else None
-
-#     def get_prix_promo(self, obj):
-#         spec = obj.specificationproduit_set.filter(est_defaut=True).first()
-#         return spec.prix_promo if spec and spec.prix_promo else None
-
-#     def get_en_stock(self, obj):
-#         spec = obj.specificationproduit_set.filter(est_defaut=True).first()
-#         return spec.quantite_stock > 0 if spec else False
-
-
-# class ImageUtilisateurSerializer(serializers.ModelSerializer):
-#     class Meta:
-#         model = ImageUtilisateur
-#         fields = '__all__'
-
-
-# class UtilisateurSerializer(serializers.ModelSerializer):
-#     class Meta:
-#         model = Utilisateur
-#         fields = ['id', 'email', 'telephone', 'date_inscription', 'derniere_connexion', 'est_actif', 'role']
-
-
-# class DetailsClientSerializer(serializers.ModelSerializer):
-#     utilisateur = UtilisateurSerializer()
-#     photo_profil = ImageUtilisateurSerializer(allow_null=True)
-
-#     class Meta:
-#         model = DetailsClient
-#         fields = '__all__'
-
-
-# class DetailsCommercantSerializer(serializers.ModelSerializer):
-#     utilisateur = UtilisateurSerializer()
-#     logo = ImageUtilisateurSerializer(allow_null=True)
-
-#     class Meta:
-#         model = DetailsCommercant
-#         fields = '__all__'
-
-
-# class CategorieSerializer(serializers.ModelSerializer):
-#     class Meta:
-#         model = Categorie
-#         fields = '__all__'
-
-
-# class ProduitSerializer(serializers.ModelSerializer):
-#     class Meta:
-#         model = Produit
-#         fields = '__all__'
-
-
-# class ImageProduitSerializer(serializers.ModelSerializer):
-#     class Meta:
-#         model = ImageProduit
-#         fields = '__all__'
-
-
-# class SpecificationProduitSerializer(serializers.ModelSerializer):
-#     class Meta:
-#         model = SpecificationProduit
-#         fields = '__all__'
-
-
-# class CommandeSerializer(serializers.ModelSerializer):
-#     class Meta:
-#         model = Commande
-#         fields = '__all__'
-
-
-# class DetailCommandeSerializer(serializers.ModelSerializer):
-#     class Meta:
-#         model = DetailCommande
-#         fields = '__all__'
-
-
-# class AvisSerializer(serializers.ModelSerializer):
-#     class Meta:
-#         model = Avis
-#         fields = '__all__'
-
-
-# class PanierSerializer(serializers.ModelSerializer):
-#     class Meta:
-#         model = Panier
-#         fields = '__all__'
-
-
-# class FavoriSerializer(serializers.ModelSerializer):
-#     class Meta:
-#         model = Favori
-#         fields = '__all__'
-
-
-# class MouvementStockSerializer(serializers.ModelSerializer):
-#     class Meta:
-#         model = MouvementStock
-#         fields = '__all__'
-
-
-# class JournalAdminSerializer(serializers.ModelSerializer):
-#     class Meta:
-#         model = JournalAdmin
-#         fields = '__all__'
+    
+    

@@ -1,73 +1,66 @@
 from django.db import models
-from django.contrib.auth.models import AbstractBaseUser, PermissionsMixin, BaseUserManager
+import uuid
+from datetime import timedelta
+from django.utils import timezone
 
 
-class UtilisateurManager(BaseUserManager):
-    def create_user(self, email, telephone, password=None, **extra_fields):
-        if not email:
-            raise ValueError('L\'adresse email est obligatoire')
-        email = self.normalize_email(email)
-        user = self.model(email=email, telephone=telephone, **extra_fields)
-        user.set_password(password)
-        user.save(using=self._db)
-        return user
 
-    def create_superuser(self, email, telephone, password=None, **extra_fields):
-        extra_fields.setdefault('est_actif', True)
-        extra_fields.setdefault('is_staff', True)
-        extra_fields.setdefault('is_superuser', True)
-        extra_fields.setdefault('role', 'admin')
-        
-        return self.create_user(email, telephone, password, **extra_fields)
-
-
-class Utilisateur(AbstractBaseUser, PermissionsMixin):
-    ROLES = (
+class Utilisateur(models.Model):
+    TYPE_UTILISATEUR_CHOICES = [
         ('client', 'Client'),
-        ('commercant', 'Commerçant'),
-        ('admin', 'Administrateur'),
-    )
-    
-    email = models.EmailField(max_length=100, unique=True)
-    telephone = models.CharField(max_length=20)
-    date_inscription = models.DateTimeField(auto_now_add=True)
-    derniere_connexion = models.DateTimeField(auto_now=True)
+        ('vendeur', 'Vendeur'),
+        ('administrateur', 'Administrateur'),
+    ]
+
+    METHODE_VERIFICATION_CHOICES = [
+        ('sms', 'SMS'),
+        ('email', 'Email'),
+    ]
+
+    id_utilisateur = models.AutoField(primary_key=True)
+    telephone = models.CharField(max_length=20, unique=True)
+    email = models.EmailField(max_length=100, unique=True, null=True, blank=True)
+    mot_de_passe = models.CharField(max_length=128)  # correspond au hash du mot de passe
+    nom = models.CharField(max_length=100, null=True, blank=True)
+    prenom = models.CharField(max_length=100, null=True, blank=True)
+    type_utilisateur = models.CharField(max_length=15, choices=TYPE_UTILISATEUR_CHOICES)
+    date_creation = models.DateTimeField(default=timezone.now)
+    date_modification = models.DateTimeField(auto_now=True)
+    est_verifie = models.BooleanField(default=False)
+    methode_verification = models.CharField(max_length=10, choices=METHODE_VERIFICATION_CHOICES, null=True, blank=True)
     est_actif = models.BooleanField(default=True)
-    role = models.CharField(max_length=20, choices=ROLES)
+
+    def __str__(self):
+        return f"{self.nom or ''} ({self.telephone})"
+
     
-    # Champs requis par Django
-    is_staff = models.BooleanField(default=False)
-    is_superuser = models.BooleanField(default=False)
-    
-    # Ces champs sont obligatoires quand on utilise AbstractBaseUser
-    USERNAME_FIELD = 'email'
-    REQUIRED_FIELDS = ['telephone']
-    
-    # Aussi obligatoire avec AbstractBaseUser
-    objects = UtilisateurManager()
-    
-    # Résoudre les conflits avec les accesseurs inverses
-    groups = models.ManyToManyField(
-        'auth.Group',
-        blank=True,
-        related_name='utilisateur_set',
-    )
-    user_permissions = models.ManyToManyField(
-        'auth.Permission',
-        blank=True,
-        related_name='utilisateur_set',
-    )
+class PasswordResetToken(models.Model):
+    utilisateur = models.ForeignKey(Utilisateur, on_delete=models.CASCADE)
+    token = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    date_creation = models.DateTimeField(auto_now_add=True)
+    date_expiration = models.DateTimeField()
+
+    def save(self, *args, **kwargs):
+        if not self.date_expiration:
+            self.date_expiration = timezone.now() + timedelta(hours=1)  # token valable 1h
+        super().save(*args, **kwargs)
+
+    def is_expired(self):
+        return timezone.now() > self.date_expiration
+
+
+
 
 
 class ImageUtilisateur(models.Model):
-    utilisateur = models.ForeignKey('Utilisateur', on_delete=models.CASCADE)
+    utilisateur = models.ForeignKey('Utilisateur', on_delete=models.CASCADE, to_field='id_utilisateur')
     url_image = models.CharField(max_length=255)
     type_image = models.CharField(max_length=50)
     date_ajout = models.DateTimeField(auto_now_add=True)
 
 
 class DetailsClient(models.Model):
-    utilisateur = models.OneToOneField('Utilisateur', on_delete=models.CASCADE)
+    utilisateur = models.OneToOneField('Utilisateur', on_delete=models.CASCADE, to_field='id_utilisateur')
     nom = models.CharField(max_length=100)
     prenom = models.CharField(max_length=100)
     adresse = models.TextField()
@@ -78,7 +71,7 @@ class DetailsClient(models.Model):
 
 
 class DetailsCommercant(models.Model):
-    utilisateur = models.OneToOneField('Utilisateur', on_delete=models.CASCADE)
+    utilisateur = models.OneToOneField('Utilisateur', on_delete=models.CASCADE, to_field='id_utilisateur')
     nom_boutique = models.CharField(max_length=200)
     description_boutique = models.TextField()
     adresse_commerciale = models.TextField()
@@ -198,14 +191,12 @@ class MouvementStock(models.Model):
 
 
 class JournalAdmin(models.Model):
-    admin = models.ForeignKey('Utilisateur', on_delete=models.CASCADE)
+    admin = models.ForeignKey('Utilisateur', on_delete=models.CASCADE, to_field='id_utilisateur')
     action = models.CharField(max_length=255)
     details = models.TextField()
     date_heure = models.DateTimeField(auto_now_add=True)
     
-    
-from django.db import models
-from django.utils import timezone
+ 
 
 class Notification(models.Model):
     produit = models.ForeignKey('Produit', on_delete=models.CASCADE)

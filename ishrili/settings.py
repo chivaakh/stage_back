@@ -25,7 +25,16 @@ SECRET_KEY = 'django-insecure--$_mfn_ow4kgg0*3i2wze3yh)!mrv11@n33*^8*bn!bt52t(9a
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = [
+    'localhost',
+    '127.0.0.1',
+    '10.0.2.2',        # Émulateur Android
+    '192.168.100.9',   # Votre IP locale Wi-Fi
+    '192.168.56.1', # Votre IP Ethernet (VirtualBox/VMware)
+    '192.168.100.79',
+    '0.0.0.0',
+    
+]
 
 
 # Application definition
@@ -58,42 +67,62 @@ MIDDLEWARE = [
 ]
 # CORS config - autorise localhost:5173 uniquement
 CORS_ALLOWED_ORIGINS = [
+    "https://localhost:5173",
     "http://localhost:5173",
-    "https://localhost:5173",  # <-- ajoute cette ligne
-
-    
+    "http://localhost:8000",       # Django dev server
+    "http://127.0.0.1:8000",       # Django dev server
+    "http://10.0.2.2:8000",        # Émulateur Android
+    "http://192.168.100.9:8000",   # Device physique (votre IP Wi-Fi)
+    "http://192.168.56.1:8000",
+    "http://192.168.100.79:8000",     # Si vous utilisez VirtualBox/VMware
 ]
 
 # Optionnel : si besoin de cookies, sessions cross-origin
 CORS_ALLOW_CREDENTIALS = True
 
+# Headers autorisés pour les requêtes Flutter
+CORS_ALLOW_HEADERS = [
+    'accept',
+    'accept-encoding',
+    'authorization',
+    'content-type',
+    'dnt',
+    'origin',
+    'user-agent',
+    'x-csrftoken',
+    'x-requested-with',
+]
+
 ROOT_URLCONF = 'ishrili.urls'
 
 
-# Configuration de Django REST Framework
+# # Configuration de Django REST Framework
+# REST_FRAMEWORK = {
+#     'DEFAULT_AUTHENTICATION_CLASSES': [
+#         'rest_framework.authentication.TokenAuthentication',
+#         'rest_framework.authentication.SessionAuthentication',
+#     ],
+#     'DEFAULT_PERMISSION_CLASSES': [
+#         'rest_framework.permissions.IsAuthenticated',
+#     ],
+#     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
+#     'PAGE_SIZE': 10,
+# }
+
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
-        'rest_framework.authentication.TokenAuthentication',
-        'rest_framework.authentication.SessionAuthentication',
+        # 'rest_framework.authentication.TokenAuthentication',  # ← COMMENTÉ
+        # 'rest_framework.authentication.SessionAuthentication',  # ← COMMENTÉ
     ],
     'DEFAULT_PERMISSION_CLASSES': [
-        'rest_framework.permissions.IsAuthenticated',
+        'rest_framework.permissions.AllowAny',  # ← MODIFIÉ : AllowAny au lieu de IsAuthenticated
     ],
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
     'PAGE_SIZE': 10,
 }
 
-# # Configuration CORS pour accès depuis Flutter
-# CORS_ALLOWED_ORIGINS = [
-#     "http://localhost:8000",
-#     "http://127.0.0.1:8000",
-#     # Ajoutez ici les origines autorisées pour votre application mobile
-# ]
 
 
-CORS_ALLOWED_ORIGINS = [
-    "http://localhost:5173",  # Vite/React
-]
 
 
 
@@ -156,7 +185,7 @@ AUTH_PASSWORD_VALIDATORS = [
 ]
 
 # Ajoutez cette ligne à settings.py
-AUTH_USER_MODEL = 'myapp.Utilisateur'
+# AUTH_USER_MODEL = 'myapp.Utilisateur'
 # Internationalization
 # https://docs.djangoproject.com/en/4.2/topics/i18n/
 
@@ -174,7 +203,60 @@ USE_TZ = True
 
 STATIC_URL = 'static/'
 
+# Configuration des fichiers media (images uploadées)
+MEDIA_URL = '/media/'
+MEDIA_ROOT = BASE_DIR / 'media'
+
+# Configuration des fichiers statiques
+STATIC_URL = '/static/'
+STATIC_ROOT = BASE_DIR / 'staticfiles'
+
+# Créer le dossier media s'il n'existe pas
+
+os.makedirs(MEDIA_ROOT, exist_ok=True)
+os.makedirs(os.path.join(MEDIA_ROOT, 'uploads', 'images'), exist_ok=True)
 # Default primary key field type
 # https://docs.djangoproject.com/en/4.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+
+SESSION_COOKIE_AGE = 1209600
+
+
+EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+EMAIL_HOST = 'smtp.gmail.com'
+EMAIL_PORT = 587
+EMAIL_USE_TLS = True
+EMAIL_HOST_USER = 'minolilo07@gmail.com'
+EMAIL_HOST_PASSWORD = 'ywov tkrc qltz gtda'
+DEFAULT_FROM_EMAIL = 'no-reply@Ishrili.com'
+
+
+# Configuration pour les logs (utile pour débugger les appels API)
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+        },
+    },
+    'loggers': {
+        'django': {
+            'handlers': ['console'],
+            'level': 'INFO',
+        },
+    },
+}
+
+# Configuration Swagger/OpenAPI (pour documenter votre API)
+SWAGGER_SETTINGS = {
+    'SECURITY_DEFINITIONS': {
+        'Token': {
+            'type': 'apiKey',
+            'name': 'Authorization',
+            'in': 'header'
+        }
+    }
+}
