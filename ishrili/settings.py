@@ -75,6 +75,7 @@ CORS_ALLOWED_ORIGINS = [
     "http://192.168.100.9:8000",   # Device physique (votre IP Wi-Fi)
     "http://192.168.56.1:8000",
     "http://192.168.100.79:8000",     # Si vous utilisez VirtualBox/VMware
+    "http://192.168.100.32:8000",  # Ton adresse IP locale
 ]
 
 # Optionnel : si besoin de cookies, sessions cross-origin

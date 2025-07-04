@@ -8,7 +8,7 @@ from .views import (
     # FavoriViewSet, AvisViewSet, ClientCommandeViewSet, ClientProfilViewSet,
     CommandeViewSet, DetailCommandeViewSet,
     # API Views - Supprimé SignupView qui n'existe pas
-    SignupWithDetailsView, LoginView,
+    LoginView,
     RequestPasswordResetView, ResetPasswordView,
     GoogleLoginView, FacebookLoginView, VendeurInfoView,
     # Functions
@@ -46,7 +46,6 @@ urlpatterns = [
 
     
     # Auth URLs - Supprimé la route 'api/signup/' qui utilisait SignupView
-    path('api/signup-with-details/', SignupWithDetailsView.as_view(), name='signup-with-details'),
     path('api/login/', LoginView.as_view(), name='login'),
     path('api/request-password-reset/', RequestPasswordResetView.as_view(), name='request-password-reset'),
     path('api/reset-password/<uuid:token>/', ResetPasswordView.as_view(), name='reset-password'),
