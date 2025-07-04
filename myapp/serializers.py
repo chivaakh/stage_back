@@ -165,7 +165,7 @@ from .models import SpecificationProduit, MouvementStock
 
 
 class ProduitSerializer(serializers.ModelSerializer):
-    # ✅ CORRECTION : Utiliser le bon nom de relation
+    # CORRECTION : Utiliser le bon nom de relation
     images = ImageProduitSerializer(many=True, read_only=True, source='imageproduit_set')
     specifications = SpecificationProduitSerializer(many=True, read_only=True, source='specificationproduit_set')
     
@@ -266,7 +266,7 @@ class DetailCommandeSerializer(serializers.ModelSerializer):
 
 class TrackingCommandeSerializer(serializers.ModelSerializer):
     class Meta:
-        model = TrackingCommande  # ✅ Référence correcte au modèle
+        model = TrackingCommande  # Référence correcte au modèle
         fields = ['ancien_statut', 'nouveau_statut', 'date_modification']
 
 
