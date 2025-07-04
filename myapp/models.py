@@ -156,12 +156,42 @@ class Commande(models.Model):
     montant_total = models.DecimalField(max_digits=10, decimal_places=2)
     statut = models.CharField(max_length=30, default='en_attente')
 
+    def save(self, *args, **kwargs):
+        # Récupérer l'ancien statut si c'est une mise à jour
+        if self.pk:
+            old_instance = Commande.objects.get(pk=self.pk)
+            old_status = old_instance.statut
+        else:
+            old_status = None
+            
+        super().save(*args, **kwargs)
+        
+        # Créer l'entrée de tracking si le statut a changé
+        if old_status != self.statut:
+            TrackingCommande.objects.create(
+                commande=self,
+                ancien_statut=old_status,
+                nouveau_statut=self.statut
+            )
+
 
 class DetailCommande(models.Model):
     commande = models.ForeignKey('Commande', on_delete=models.CASCADE)
     specification = models.ForeignKey('SpecificationProduit', on_delete=models.CASCADE)
     quantite = models.IntegerField()
     prix_unitaire = models.DecimalField(max_digits=10, decimal_places=2)
+
+class TrackingCommande(models.Model):
+    commande = models.ForeignKey('Commande', on_delete=models.CASCADE, related_name='tracking_history')
+    ancien_statut = models.CharField(max_length=30, blank=True, null=True)
+    nouveau_statut = models.CharField(max_length=30)
+    date_modification = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        ordering = ['-date_modification']
+        verbose_name = "Historique de commande"
+        verbose_name_plural = "Historiques de commandes"
+
 
 
 class Avis(models.Model):

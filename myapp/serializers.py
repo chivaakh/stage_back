@@ -1,6 +1,14 @@
+# from rest_framework import serializers/
+# from .models import Produit, ImageProduit, SpecificationProduit, 
+
+# myapp/serializers_client.py - Serializers spécifiques aux clients
+
 from rest_framework import serializers
-from .models import Produit, ImageProduit, SpecificationProduit, Utilisateur, ProfilVendeur
+from .models import Produit, ImageProduit, SpecificationProduit, Utilisateur, ProfilVendeur, TrackingCommande, Utilisateur
 from django.contrib.auth.hashers import make_password
+from rest_framework import serializers
+from django.contrib.auth.hashers import make_password
+from .models import Utilisateur, DetailsClient, DetailsCommercant
 
 
 class SignupSerializer(serializers.ModelSerializer):
@@ -40,6 +48,61 @@ class LoginSerializer(serializers.Serializer):
     identifiant = serializers.CharField(required=True)  # email ou téléphone
     mot_de_passe = serializers.CharField(required=True, write_only=True)
 
+
+
+class DetailsClientSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = DetailsClient
+        fields = ['nom', 'prenom', 'adresse', 'ville', 'code_postal', 'pays']
+
+class DetailsCommercantSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = DetailsCommercant
+        fields = [
+            'nom_boutique', 'description_boutique', 'adresse_commerciale',
+            'ville', 'code_postal', 'pays', 'commission_rate'
+        ]
+
+
+class SignupWithDetailsSerializer(serializers.Serializer):
+    email = serializers.EmailField(required=True)
+    telephone = serializers.CharField(required=True)
+    mot_de_passe = serializers.CharField(write_only=True, min_length=6)
+    role = serializers.ChoiceField(choices=[('client','Client'),('vendeur','Vendeur')])
+    details_client = DetailsClientSerializer(required=False)
+    details_commercant = DetailsCommercantSerializer(required=False)
+
+    def validate(self, data):
+        # un seul des deux doit être présent selon le rôle
+        if data['role'] == 'client' and 'details_client' not in data:
+            raise serializers.ValidationError("Les détails client sont obligatoires.")
+        if data['role'] == 'vendeur' and 'details_commercant' not in data:
+            raise serializers.ValidationError("Les détails commerçant sont obligatoires.")
+        return data
+
+    def create(self, validated_data):
+        from django.contrib.auth.hashers import make_password
+        from .models import Utilisateur, DetailsClient, DetailsCommercant
+
+        details_client_data = validated_data.pop('details_client', None)
+        details_commercant_data = validated_data.pop('details_commercant', None)
+        pwd = validated_data.pop('mot_de_passe')
+        utilisateur = Utilisateur.objects.create(
+            email=validated_data['email'],
+            telephone=validated_data['telephone'],
+            mot_de_passe=make_password(pwd),
+            type_utilisateur=validated_data['role']
+        )
+        # créer le profil associé
+        if utilisateur.type_utilisateur == 'client':
+            DetailsClient.objects.create(utilisateur=utilisateur, **details_client_data)
+        else:
+            # on fixe est_verifie à False, note_moyenne à 0.00 par défaut
+            DetailsCommercant.objects.create(
+                utilisateur=utilisateur,
+                **details_commercant_data
+            )
+        return utilisateur
 
 
 
@@ -200,13 +263,21 @@ class DetailCommandeSerializer(serializers.ModelSerializer):
         model = DetailCommande
         fields = ['id', 'quantite', 'prix_unitaire', 'specification', 'specification_nom']
 
+
+class TrackingCommandeSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = TrackingCommande  # ✅ Référence correcte au modèle
+        fields = ['ancien_statut', 'nouveau_statut', 'date_modification']
+
+
 class CommandeSerializer(serializers.ModelSerializer):
     client_nom = serializers.SerializerMethodField()
     client_adresse = serializers.SerializerMethodField()
     client_ville = serializers.SerializerMethodField()
     client_pays = serializers.SerializerMethodField()
     details = DetailCommandeSerializer(source='detailcommande_set', many=True)
-    
+    tracking_history = TrackingCommandeSerializer(many=True, read_only=True)
+
     class Meta:
         model = Commande
         fields = '__all__'

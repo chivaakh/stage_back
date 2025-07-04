@@ -30,7 +30,10 @@ ALLOWED_HOSTS = [
     '127.0.0.1',
     '10.0.2.2',        # Émulateur Android
     '192.168.100.9',   # Votre IP locale Wi-Fi
-    '192.168.56.1',    # Votre IP Ethernet (VirtualBox/VMware)
+    '192.168.56.1', # Votre IP Ethernet (VirtualBox/VMware)
+    '192.168.100.79',
+    '0.0.0.0',
+    
 ]
 
 
@@ -70,7 +73,8 @@ CORS_ALLOWED_ORIGINS = [
     "http://127.0.0.1:8000",       # Django dev server
     "http://10.0.2.2:8000",        # Émulateur Android
     "http://192.168.100.9:8000",   # Device physique (votre IP Wi-Fi)
-    "http://192.168.56.1:8000",    # Si vous utilisez VirtualBox/VMware
+    "http://192.168.56.1:8000",
+    "http://192.168.100.79:8000",     # Si vous utilisez VirtualBox/VMware
 ]
 
 # Optionnel : si besoin de cookies, sessions cross-origin
@@ -101,7 +105,7 @@ REST_FRAMEWORK = {
         'rest_framework.authentication.SessionAuthentication',
     ],
     'DEFAULT_PERMISSION_CLASSES': [
-        'rest_framework.permissions.IsAuthenticated',
+        'rest_framework.permissions.AllowAny',  # ← MODIFIÉ : AllowAny au lieu de IsAuthenticated
     ],
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
     'PAGE_SIZE': 10,
@@ -189,6 +193,18 @@ USE_TZ = True
 
 STATIC_URL = 'static/'
 
+# Configuration des fichiers media (images uploadées)
+MEDIA_URL = '/media/'
+MEDIA_ROOT = BASE_DIR / 'media'
+
+# Configuration des fichiers statiques
+STATIC_URL = '/static/'
+STATIC_ROOT = BASE_DIR / 'staticfiles'
+
+# Créer le dossier media s'il n'existe pas
+
+os.makedirs(MEDIA_ROOT, exist_ok=True)
+os.makedirs(os.path.join(MEDIA_ROOT, 'uploads', 'images'), exist_ok=True)
 # Default primary key field type
 # https://docs.djangoproject.com/en/4.2/ref/settings/#default-auto-field
 
