@@ -50,6 +50,40 @@ class PasswordResetToken(models.Model):
 
 
 
+class ProfilVendeur(models.Model):
+    utilisateur = models.OneToOneField(
+        Utilisateur, 
+        on_delete=models.CASCADE, 
+        related_name='profil_vendeur',
+        limit_choices_to={'type_utilisateur': 'vendeur'}
+    )
+    nom_boutique = models.CharField(max_length=100)
+    description = models.TextField(blank=True, null=True)
+    adresse = models.CharField(max_length=255, blank=True, null=True)
+    ville = models.CharField(max_length=100)
+    telephone_professionnel = models.CharField(max_length=20, blank=True, null=True)
+    logo = models.ImageField(upload_to='logos/', blank=True, null=True)
+    taux_commission = models.DecimalField(max_digits=5, decimal_places=2, default=5.00)
+    est_approuve = models.BooleanField(default=False)
+    total_ventes = models.DecimalField(max_digits=15, decimal_places=2, default=0.00)
+    evaluation = models.DecimalField(max_digits=3, decimal_places=2, default=0.00)
+    date_creation = models.DateTimeField(auto_now_add=True)
+    date_modification = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"Boutique : {self.nom_boutique} (Vendeur ID: {self.utilisateur.id_utilisateur})"
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 class ImageUtilisateur(models.Model):

@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Produit, ImageProduit, SpecificationProduit, Utilisateur
+from .models import Produit, ImageProduit, SpecificationProduit, Utilisateur, ProfilVendeur
 from django.contrib.auth.hashers import make_password
 
 
@@ -20,19 +20,65 @@ class SignupSerializer(serializers.ModelSerializer):
         return data
 
     def create(self, validated_data):
-        # Hash du mot de passe
+        request = self.context.get('request')
+        type_utilisateur = request.data.get('type_utilisateur')
+
+        if type_utilisateur not in ['client', 'vendeur']:
+            raise serializers.ValidationError("Le type d'utilisateur est requis et doit être 'client' ou 'vendeur'.")
+
         mot_de_passe = validated_data.pop('mot_de_passe')
         utilisateur = Utilisateur(**validated_data)
         utilisateur.mot_de_passe = make_password(mot_de_passe)
-        utilisateur.type_utilisateur = 'vendeur'  # Role par défaut
+        utilisateur.type_utilisateur = type_utilisateur
         utilisateur.save()
         return utilisateur
+
 
 
 
 class LoginSerializer(serializers.Serializer):
     identifiant = serializers.CharField(required=True)  # email ou téléphone
     mot_de_passe = serializers.CharField(required=True, write_only=True)
+
+
+
+
+# Version alternative si le problème persiste - dans serializers.py
+
+class ProfilVendeurSerializer(serializers.ModelSerializer):
+    # Exclure utilisateur des champs gérés automatiquement
+    utilisateur = serializers.PrimaryKeyRelatedField(read_only=True)
+    
+    class Meta:
+        model = ProfilVendeur
+        fields = [
+            'id',
+            'utilisateur',
+            'nom_boutique', 
+            'description', 
+            'adresse', 
+            'ville', 
+            'telephone_professionnel', 
+            'logo',
+            'est_approuve', 
+            'total_ventes', 
+            'evaluation', 
+            'date_creation', 
+            'date_modification'
+        ]
+        read_only_fields = ['id_profil_vendeur', 'utilisateur', 'est_approuve', 'total_ventes', 'evaluation', 'date_creation', 'date_modification']
+
+    def create(self, validated_data):
+        # L'utilisateur sera passé via serializer.save(utilisateur=utilisateur)
+        return ProfilVendeur.objects.create(**validated_data)
+
+
+
+
+
+
+
+
 
 
 

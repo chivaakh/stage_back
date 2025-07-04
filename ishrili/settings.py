@@ -92,9 +92,11 @@ CORS_ALLOW_HEADERS = [
 ROOT_URLCONF = 'ishrili.urls'
 
 
+
 # Configuration de Django REST Framework
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
+        'myapp.authentication.CustomSessionAuthentication',
         'rest_framework.authentication.TokenAuthentication',
         'rest_framework.authentication.SessionAuthentication',
     ],
@@ -232,3 +234,13 @@ SWAGGER_SETTINGS = {
         }
     }
 }
+
+
+MEDIA_URL = '/media/'
+MEDIA_ROOT = BASE_DIR / 'media'
+
+
+SESSION_COOKIE_SAMESITE = "None"  # ← requis pour autoriser en cross-site + HTTPS
+SESSION_COOKIE_SECURE = True      # ← requis car frontend en HTTPS
+CSRF_COOKIE_SAMESITE = "None"
+CSRF_COOKIE_SECURE = True

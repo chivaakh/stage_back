@@ -3,8 +3,8 @@ from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from django.db import transaction
-from .models import Produit, ImageProduit, SpecificationProduit, Utilisateur, PasswordResetToken
-from .serializers import ProduitSerializer, ImageProduitSerializer, SpecificationProduitSerializer , SignupSerializer, LoginSerializer
+from .models import Produit, ImageProduit, SpecificationProduit, Utilisateur, PasswordResetToken, ProfilVendeur
+from .serializers import ProduitSerializer, ImageProduitSerializer, SpecificationProduitSerializer , SignupSerializer, LoginSerializer, ProfilVendeurSerializer
 import logging
 import os
 from django.conf import settings
@@ -31,7 +31,7 @@ from google.auth.transport import requests as google_requests
 from django.db import transaction
 import requests
 from django.utils.crypto import get_random_string
-
+from rest_framework.permissions import IsAuthenticated
 
 
 
@@ -44,8 +44,8 @@ class SignupView(APIView):
 
     def post(self, request):
         try:
-            serializer = SignupSerializer(data=request.data)
-            if serializer.is_valid(raise_exception=True):  # raise_exception True pour gérer les erreurs
+            serializer = SignupSerializer(data=request.data, context={'request': request})  # ✅ FIX ICI
+            if serializer.is_valid(raise_exception=True):
                 serializer.save()
                 return Response({"message": "Utilisateur créé avec succès"}, status=status.HTTP_201_CREATED)
             else:
@@ -53,7 +53,11 @@ class SignupView(APIView):
         except Exception as e:
             import traceback
             traceback_str = traceback.format_exc()
-            return Response({"error": str(e), "trace": traceback_str}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            return Response({
+                "error": str(e),
+                "trace": traceback_str
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 
 
 
@@ -250,11 +254,106 @@ class FacebookLoginView(APIView):
 
 
 
+class CreerProfilVendeurView(APIView):
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        user_id = request.session.get('user_id')
+        if not user_id:
+            return Response({"error": "Non connecté."}, status=401)
+
+        try:
+            utilisateur = Utilisateur.objects.get(id_utilisateur=user_id)
+            profil = utilisateur.profil_vendeur
+            serializer = ProfilVendeurSerializer(profil)
+            return Response(serializer.data, status=200)
+        except Utilisateur.DoesNotExist:
+            return Response({"error": "Utilisateur non trouvé."}, status=401)
+        except ProfilVendeur.DoesNotExist:
+            return Response({"detail": "Profil vendeur introuvable."}, status=404)
+
+    def post(self, request):
+        # Vérification session
+        user_id = request.session.get('user_id')
+        if not user_id:
+            return Response({"error": "Vous devez être connecté pour créer une boutique."}, status=401)
+
+        try:
+            #  Récupération utilisateur
+            utilisateur = Utilisateur.objects.get(id_utilisateur=user_id)
+        except Utilisateur.DoesNotExist:
+            return Response({"error": "Utilisateur invalide."}, status=401)
+
+        # Vérification type vendeur
+        if utilisateur.type_utilisateur != 'vendeur':
+            return Response({"error": "Seuls les vendeurs peuvent créer un profil boutique."}, status=403)
+
+        # Vérification profil existant
+        if hasattr(utilisateur, 'profil_vendeur'):
+            return Response({"error": "Le profil vendeur existe déjà."}, status=400)
+
+        # Validation données
+        serializer = ProfilVendeurSerializer(data=request.data)
+        if serializer.is_valid():
+            try:
+                # Création profil avec utilisateur
+                profil = serializer.save(utilisateur=utilisateur)
+                return Response(ProfilVendeurSerializer(profil).data, status=201)
+            except Exception as e:
+                return Response({
+                    "error": "Erreur lors de la création du profil.",
+                    "detail": str(e)
+                }, status=500)
+        else:
+            return Response(serializer.errors, status=400)
 
 
 
+# Ajoutez cette nouvelle vue dans votre views.py
 
+class VendeurInfoView(APIView):
+    permission_classes = [AllowAny]
 
+    def get(self, request):
+        user_id = request.session.get('user_id')
+        if not user_id:
+            return Response({"error": "Non connecté."}, status=401)
+
+        try:
+            utilisateur = Utilisateur.objects.get(id_utilisateur=user_id)
+        except Utilisateur.DoesNotExist:
+            return Response({"error": "Utilisateur non trouvé."}, status=401)
+
+        # Informations de base de l'utilisateur
+        user_info = {
+            "nom": utilisateur.nom or "",
+            "prenom": utilisateur.prenom or "",
+            "email": utilisateur.email or "",
+            "telephone": utilisateur.telephone or "",
+            "type_utilisateur": utilisateur.type_utilisateur,
+            "date_creation": utilisateur.date_creation,
+            "est_verifie": utilisateur.est_verifie
+        }
+
+        # Si c'est un vendeur, ajouter les infos de la boutique
+        if utilisateur.type_utilisateur == 'vendeur':
+            try:
+                profil_vendeur = utilisateur.profil_vendeur
+                user_info.update({
+                    "boutique": {
+                        "nom_boutique": profil_vendeur.nom_boutique,
+                        "description": profil_vendeur.description,
+                        "ville": profil_vendeur.ville,
+                        "est_approuve": profil_vendeur.est_approuve,
+                        "evaluation": float(profil_vendeur.evaluation),
+                        "total_ventes": float(profil_vendeur.total_ventes),
+                        "logo": profil_vendeur.logo.url if profil_vendeur.logo else None
+                    }
+                })
+            except ProfilVendeur.DoesNotExist:
+                user_info["boutique"] = None
+
+        return Response(user_info, status=200)
 
 
 

@@ -38,6 +38,8 @@ urlpatterns = [
     path('api/reset-password/<uuid:token>/', ResetPasswordView.as_view(), name='reset-password'),
     path("api/login/google/", GoogleLoginView.as_view(), name="google-login"),
     path('api/facebook-login/', FacebookLoginView.as_view(), name='facebook-login'),
+    path('api/profil-vendeur/', CreerProfilVendeurView.as_view(), name='profil_vendeur'),
+    path('api/vendeur-info/', VendeurInfoView.as_view(), name='vendeur_info'),
     path('upload-image/', upload_image, name='upload-image'),
 ]
 
