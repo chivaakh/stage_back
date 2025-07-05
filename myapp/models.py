@@ -211,8 +211,16 @@ class Avis(models.Model):
 class Panier(models.Model):
     client = models.ForeignKey('DetailsClient', on_delete=models.CASCADE)
     specification = models.ForeignKey('SpecificationProduit', on_delete=models.CASCADE)
-    quantite = models.IntegerField()
+    quantite = models.PositiveIntegerField(default=1)  # ✅ CHANGE: PositiveIntegerField
     date_ajout = models.DateTimeField(auto_now_add=True)
+    date_modification = models.DateTimeField(auto_now=True)  # ✅ AJOUT: Track modifications
+    
+    class Meta:
+        unique_together = ['client', 'specification']  # ✅ AJOUT: Éviter doublons
+        ordering = ['-date_modification']
+    
+    def __str__(self):
+        return f"{self.client.nom} - {self.specification.nom} x{self.quantite}"
 
 
 class Favori(models.Model):
