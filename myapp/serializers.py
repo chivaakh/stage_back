@@ -4,7 +4,7 @@
 # myapp/serializers_client.py - Serializers spécifiques aux clients
 
 from rest_framework import serializers
-from .models import Produit, ImageProduit, SpecificationProduit, TrackingCommande, Utilisateur
+from .models import Produit, ImageProduit, SpecificationProduit, Utilisateur, ProfilVendeur, TrackingCommande, Utilisateur
 from django.contrib.auth.hashers import make_password
 from rest_framework import serializers
 from django.contrib.auth.hashers import make_password
@@ -38,16 +38,17 @@ class SignupSerializer(serializers.ModelSerializer):
         return data
 
     def create(self, validated_data):
+        request = self.context.get('request')
+        type_utilisateur = request.data.get('type_utilisateur')
+
+        if type_utilisateur not in ['client', 'vendeur']:
+            raise serializers.ValidationError("Le type d'utilisateur est requis et doit être 'client' ou 'vendeur'.")
+
         mot_de_passe = validated_data.pop('mot_de_passe')
         utilisateur = Utilisateur(**validated_data)
         utilisateur.mot_de_passe = make_password(mot_de_passe)
-        utilisateur.type_utilisateur = 'vendeur'
-        try:
-            utilisateur.save()
-        except Exception as e:
-            import traceback
-            traceback.print_exc()
-            raise serializers.ValidationError({"non_field_errors": [str(e)]})
+        utilisateur.type_utilisateur = type_utilisateur
+        utilisateur.save()
         return utilisateur
 
 
@@ -570,6 +571,46 @@ class SignupWithDetailsSerializer(serializers.Serializer):
 
 
 
+# Version alternative si le problème persiste - dans serializers.py
+
+class ProfilVendeurSerializer(serializers.ModelSerializer):
+    # Exclure utilisateur des champs gérés automatiquement
+    utilisateur = serializers.PrimaryKeyRelatedField(read_only=True)
+    
+    class Meta:
+        model = ProfilVendeur
+        fields = [
+            'id',
+            'utilisateur',
+            'nom_boutique', 
+            'description', 
+            'adresse', 
+            'ville', 
+            'telephone_professionnel', 
+            'logo',
+            'est_approuve', 
+            'total_ventes', 
+            'evaluation', 
+            'date_creation', 
+            'date_modification'
+        ]
+        read_only_fields = ['id_profil_vendeur', 'utilisateur', 'est_approuve', 'total_ventes', 'evaluation', 'date_creation', 'date_modification']
+
+    def create(self, validated_data):
+        # L'utilisateur sera passé via serializer.save(utilisateur=utilisateur)
+        return ProfilVendeur.objects.create(**validated_data)
+
+
+
+
+
+
+
+
+
+
+
+
 class ImageProduitSerializer(serializers.ModelSerializer):
     class Meta:
         model = ImageProduit
@@ -583,7 +624,7 @@ from .models import SpecificationProduit, MouvementStock
 
 
 class ProduitSerializer(serializers.ModelSerializer):
-    # ✅ CORRECTION : Utiliser le bon nom de relation
+    # CORRECTION : Utiliser le bon nom de relation
     images = ImageProduitSerializer(many=True, read_only=True, source='imageproduit_set')
     specifications = SpecificationProduitSerializer(many=True, read_only=True, source='specificationproduit_set')
     
@@ -684,7 +725,7 @@ from .models import Commande, DetailCommande
 
 class TrackingCommandeSerializer(serializers.ModelSerializer):
     class Meta:
-        model = TrackingCommande  # ✅ Référence correcte au modèle
+        model = TrackingCommande  # Référence correcte au modèle
         fields = ['ancien_statut', 'nouveau_statut', 'date_modification']
 
 

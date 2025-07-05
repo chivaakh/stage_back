@@ -75,6 +75,7 @@ CORS_ALLOWED_ORIGINS = [
     "http://192.168.100.9:8000",   # Device physique (votre IP Wi-Fi)
     "http://192.168.56.1:8000",
     "http://192.168.100.79:8000",     # Si vous utilisez VirtualBox/VMware
+    "http://192.168.100.32:8000",  # Ton adresse IP locale
 ]
 
 # Optionnel : si besoin de cookies, sessions cross-origin
@@ -96,23 +97,13 @@ CORS_ALLOW_HEADERS = [
 ROOT_URLCONF = 'ishrili.urls'
 
 
-# # Configuration de Django REST Framework
-# REST_FRAMEWORK = {
-#     'DEFAULT_AUTHENTICATION_CLASSES': [
-#         'rest_framework.authentication.TokenAuthentication',
-#         'rest_framework.authentication.SessionAuthentication',
-#     ],
-#     'DEFAULT_PERMISSION_CLASSES': [
-#         'rest_framework.permissions.IsAuthenticated',
-#     ],
-#     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
-#     'PAGE_SIZE': 10,
-# }
 
+# Configuration de Django REST Framework
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
-        # 'rest_framework.authentication.TokenAuthentication',  # ← COMMENTÉ
-        # 'rest_framework.authentication.SessionAuthentication',  # ← COMMENTÉ
+        'myapp.authentication.CustomSessionAuthentication',
+        'rest_framework.authentication.TokenAuthentication',
+        'rest_framework.authentication.SessionAuthentication',
     ],
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.AllowAny',  # ← MODIFIÉ : AllowAny au lieu de IsAuthenticated
@@ -260,3 +251,13 @@ SWAGGER_SETTINGS = {
         }
     }
 }
+
+
+MEDIA_URL = '/media/'
+MEDIA_ROOT = BASE_DIR / 'media'
+
+
+SESSION_COOKIE_SAMESITE = "None"  # ← requis pour autoriser en cross-site + HTTPS
+SESSION_COOKIE_SECURE = True      # ← requis car frontend en HTTPS
+CSRF_COOKIE_SAMESITE = "None"
+CSRF_COOKIE_SECURE = True

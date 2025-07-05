@@ -7,8 +7,8 @@ from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from django.db import transaction
-from .models import Produit, ImageProduit, SpecificationProduit, Utilisateur, PasswordResetToken
-from .serializers import ProduitSerializer, ImageProduitSerializer, SpecificationProduitSerializer , SignupSerializer, LoginSerializer
+from .models import Produit, ImageProduit, SpecificationProduit, Utilisateur, PasswordResetToken, ProfilVendeur
+from .serializers import AvisCreateSerializer, AvisSerializer, ClientCategorieSerializer, ClientCommandeSerializer, CommandeCreateSerializer, FavoriSerializer, PanierSerializer, ProduitSerializer, ImageProduitSerializer, SpecificationProduitSerializer , SignupSerializer, LoginSerializer, ProfilVendeurSerializer
 import logging
 import os
 import uuid
@@ -57,162 +57,78 @@ from google.auth.transport import requests as google_requests
 from django.db import transaction
 import requests
 from django.utils.crypto import get_random_string
+from rest_framework.permissions import IsAuthenticated
+
+
 from .serializers import SignupWithDetailsSerializer
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework import status
 
-# À ajouter dans views.py - Vue SignupView simple
+
+# Dans views.py - Vue SignupWithDetails corrigée
+from rest_framework.views import APIView
+from rest_framework.permissions import AllowAny
+from rest_framework.response import Response
+from rest_framework import status
+from django.db import transaction
+from django.contrib.auth.hashers import make_password
+import traceback
+import json
+
+
+from django.db import transaction
+from django.utils import timezone
+from rest_framework import viewsets, status, filters
+from rest_framework.decorators import action
+from rest_framework.response import Response
+from rest_framework.permissions import IsAuthenticated, AllowAny
+from django_filters.rest_framework import DjangoFilterBackend
+from django.db.models import Q, Avg, Count
+from .models import (
+    Produit, Categorie, Panier, Favori, Commande, 
+    DetailCommande, Avis, DetailsClient, SpecificationProduit
+)
+from .serializers import (
+    ClientProduitSerializer, 
+    ClientCategorieSerializer,
+    PanierSerializer, PanierCreateSerializer, 
+    FavoriSerializer,
+    AvisSerializer, AvisCreateSerializer, ClientCommandeSerializer,
+    CommandeCreateSerializer, 
+    DetailsClientSerializer
+)
+import logging
+
+
+
+
+
+
+
+
+
 class SignupView(APIView):
     permission_classes = [AllowAny]
 
     def post(self, request):
         try:
-            print("🔍 DEBUG: SignupView simple")
-            
-            # Données de base
-            email = request.data.get('email')
-            mot_de_passe = request.data.get('mot_de_passe')
-            telephone = request.data.get('telephone')
-            
-            # Validations
-            if not email or not mot_de_passe:
-                return Response({
-                    'error': 'Email et mot de passe requis'
-                }, status=status.HTTP_400_BAD_REQUEST)
-            
-            # Vérification existence
-            if Utilisateur.objects.filter(email=email).exists():
-                return Response({
-                    'error': 'Un utilisateur avec cet email existe déjà'
-                }, status=status.HTTP_400_BAD_REQUEST)
-            
-            # Création utilisateur simple
-            utilisateur = Utilisateur(
-                email=email,
-                telephone=telephone or '',
-                type_utilisateur='client'  # Type par défaut
-            )
-            utilisateur.mot_de_passe = make_password(mot_de_passe)
-            utilisateur.save()
-            
-            return Response({
-                'message': 'Utilisateur créé avec succès',
-                'user_id': utilisateur.id_utilisateur
-            }, status=status.HTTP_201_CREATED)
-            
+            serializer = SignupSerializer(data=request.data, context={'request': request})  # FIX ICI
+            if serializer.is_valid(raise_exception=True):
+                serializer.save()
+                return Response({"message": "Utilisateur créé avec succès"}, status=status.HTTP_201_CREATED)
+            else:
+                return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
-            print(f"❌ SignupView error: {e}")
+            import traceback
+            traceback_str = traceback.format_exc()
             return Response({
-                'error': f'Erreur: {str(e)}'
+                "error": str(e),
+                "trace": traceback_str
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        
 
 
-class SignupWithDetailsView(APIView):
-    permission_classes = [AllowAny]
-
-    def post(self, request):
-        try:
-            print("🔍 DEBUG: Début signup-with-details")
-            print(f"🔍 DEBUG: Données reçues: {request.data}")
-            
-            # 1. Extraction des données principales
-            email = request.data.get('email')
-            mot_de_passe = request.data.get('mot_de_passe')
-            telephone = request.data.get('telephone')
-            role = request.data.get('role')
-            
-            print(f"🔍 DEBUG: email={email}, role={role}, telephone={telephone}")
-            
-            # 2. Validations de base
-            if not email or not mot_de_passe:
-                return Response({
-                    'error': 'Email et mot de passe requis'
-                }, status=status.HTTP_400_BAD_REQUEST)
-            
-            if not role or role not in ['client', 'vendeur', 'administrateur']:
-                return Response({
-                    'error': 'Rôle requis (client, vendeur ou administrateur)'
-                }, status=status.HTTP_400_BAD_REQUEST)
-            
-            # 3. Vérifier si l'utilisateur existe déjà
-            if Utilisateur.objects.filter(email=email).exists():
-                return Response({
-                    'error': 'Un utilisateur avec cet email existe déjà'
-                }, status=status.HTTP_400_BAD_REQUEST)
-            
-            # 4. Création avec transaction
-            with transaction.atomic():
-                print("🔍 DEBUG: Création de l'utilisateur...")
-                
-                # ✅ SOLUTION DE CONTOURNEMENT : Créer d'abord l'utilisateur
-                utilisateur = Utilisateur(
-                    email=email,
-                    telephone=telephone or '',
-                    type_utilisateur=role
-                )
-                
-                # Ajouter le mot de passe après création
-                utilisateur.mot_de_passe = make_password(mot_de_passe)
-                
-                # Sauvegarder
-                utilisateur.save()
-                
-                print(f"✅ DEBUG: Utilisateur créé avec ID: {utilisateur.id_utilisateur}")
-                
-                # 5. Traitement des détails selon le rôle
-                if role == 'client':
-                    details_client = request.data.get('details_client', {})
-                    print(f"🔍 DEBUG: Détails client: {details_client}")
-                    
-                    # Créer le profil client séparé
-                    if details_client:
-                        DetailsClient.objects.create(
-                            utilisateur=utilisateur,
-                            nom=details_client.get('nom', ''),
-                            prenom=details_client.get('prenom', ''),
-                            adresse=details_client.get('adresse', ''),
-                            ville=details_client.get('ville', ''),
-                            code_postal=details_client.get('code_postal', ''),
-                            pays=details_client.get('pays', ''),
-                        )
-                        print("✅ DEBUG: Profil client créé")
-                    
-                elif role == 'vendeur':  # Note: 'commercant' -> 'vendeur' selon votre modèle
-                    details_commercant = request.data.get('details_commercant', {})
-                    print(f"🔍 DEBUG: Détails commerçant: {details_commercant}")
-                    
-                    # Créer le profil commerçant séparé
-                    if details_commercant:
-                        DetailsCommercant.objects.create(
-                            utilisateur=utilisateur,
-                            nom_boutique=details_commercant.get('nom_boutique', ''),
-                            description_boutique=details_commercant.get('description_boutique', ''),
-                            adresse_commerciale=details_commercant.get('adresse_commerciale', ''),
-                            ville=details_commercant.get('ville', ''),
-                            code_postal=details_commercant.get('code_postal', ''),
-                            pays=details_commercant.get('pays', ''),
-                            est_verifie=False,
-                            note_moyenne=0.00,
-                            commission_rate=details_commercant.get('commission_rate', 5.0),
-                        )
-                        print("✅ DEBUG: Profil commerçant créé")
-                
-                print("✅ DEBUG: Inscription réussie")
-                return Response({
-                    'message': 'Inscription réussie',
-                    'user_id': utilisateur.id_utilisateur,
-                    'email': utilisateur.email,
-                    'role': utilisateur.type_utilisateur
-                }, status=status.HTTP_201_CREATED)
-                
-        except Exception as e:
-            print(f"❌ DEBUG: Erreur générale: {e}")
-            print(f"❌ DEBUG: Traceback: {traceback.format_exc()}")
-            return Response({
-                'error': f'Erreur interne: {str(e)}',
-                'debug': traceback.format_exc() if settings.DEBUG else None
-            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 class LoginView(APIView):
     permission_classes = [AllowAny]
@@ -241,125 +157,6 @@ class LoginView(APIView):
 
 
 
-# Dans views.py - Vue SignupWithDetails corrigée
-from rest_framework.views import APIView
-from rest_framework.permissions import AllowAny
-from rest_framework.response import Response
-from rest_framework import status
-from django.db import transaction
-from django.contrib.auth.hashers import make_password
-import traceback
-import json
-
-class SignupWithDetailsView(APIView):
-    permission_classes = [AllowAny]
-
-    def post(self, request):
-        try:
-            print("🔍 DEBUG: Début signup-with-details")
-            print(f"🔍 DEBUG: Données reçues: {request.data}")
-            
-            # 1. Extraction des données principales
-            email = request.data.get('email')
-            mot_de_passe = request.data.get('mot_de_passe')
-            telephone = request.data.get('telephone')
-            role = request.data.get('role')
-            
-            print(f"🔍 DEBUG: email={email}, role={role}, telephone={telephone}")
-            
-            # 2. Validations de base
-            if not email or not mot_de_passe:
-                return Response({
-                    'error': 'Email et mot de passe requis'
-                }, status=status.HTTP_400_BAD_REQUEST)
-            
-            if not role or role not in ['client', 'commercant']:
-                return Response({
-                    'error': 'Rôle requis (client ou commercant)'
-                }, status=status.HTTP_400_BAD_REQUEST)
-            
-            # 3. Vérifier si l'utilisateur existe déjà
-            if Utilisateur.objects.filter(email=email).exists():
-                return Response({
-                    'error': 'Un utilisateur avec cet email existe déjà'
-                }, status=status.HTTP_400_BAD_REQUEST)
-            
-            # 4. Création avec transaction
-            with transaction.atomic():
-                print("🔍 DEBUG: Création de l'utilisateur...")
-                
-                # Créer l'utilisateur principal
-                utilisateur = Utilisateur.objects.create(
-                    email=email,
-                    mot_de_passe=make_password(mot_de_passe),
-                    telephone=telephone or '',
-                    type_utilisateur=role
-                )
-                
-                print(f"✅ DEBUG: Utilisateur créé avec ID: {utilisateur.id_utilisateur}")
-                
-                # 5. Traitement des détails selon le rôle
-                if role == 'client':
-                    details_client = request.data.get('details_client', {})
-                    print(f"🔍 DEBUG: Détails client: {details_client}")
-                    
-                    # Mettre à jour les champs utilisateur avec les détails client
-                    if details_client.get('nom'):
-                        utilisateur.nom = details_client['nom']
-                    if details_client.get('prenom'):
-                        utilisateur.prenom = details_client['prenom']
-                    
-                    # Si vous avez un modèle DetailsClient séparé, créez-le ici
-                    # DetailsClient.objects.create(
-                    #     utilisateur=utilisateur,
-                    #     adresse=details_client.get('adresse', ''),
-                    #     ville=details_client.get('ville', ''),
-                    #     code_postal=details_client.get('code_postal', ''),
-                    #     pays=details_client.get('pays', ''),
-                    # )
-                    
-                elif role == 'commercant':
-                    details_commercant = request.data.get('details_commercant', {})
-                    print(f"🔍 DEBUG: Détails commerçant: {details_commercant}")
-                    
-                    # Si vous avez un modèle DetailsCommercant, créez-le ici
-                    # DetailsCommercant.objects.create(
-                    #     utilisateur=utilisateur,
-                    #     nom_boutique=details_commercant.get('nom_boutique', ''),
-                    #     description_boutique=details_commercant.get('description_boutique', ''),
-                    #     adresse_commerciale=details_commercant.get('adresse_commerciale', ''),
-                    #     ville=details_commercant.get('ville', ''),
-                    #     code_postal=details_commercant.get('code_postal', ''),
-                    #     pays=details_commercant.get('pays', ''),
-                    #     est_verifie=False,
-                    #     note_moyenne=0.0,
-                    #     commission_rate=details_commercant.get('commission_rate', 5.0),
-                    # )
-                
-                # Sauvegarder les modifications
-                utilisateur.save()
-                
-                print("✅ DEBUG: Inscription réussie")
-                return Response({
-                    'message': 'Inscription réussie',
-                    'user_id': utilisateur.id_utilisateur,
-                    'email': utilisateur.email,
-                    'role': utilisateur.type_utilisateur
-                }, status=status.HTTP_201_CREATED)
-                
-        except json.JSONDecodeError as e:
-            print(f"❌ DEBUG: Erreur JSON: {e}")
-            return Response({
-                'error': 'Format JSON invalide'
-            }, status=status.HTTP_400_BAD_REQUEST)
-            
-        except Exception as e:
-            print(f"❌ DEBUG: Erreur générale: {e}")
-            print(f"❌ DEBUG: Traceback: {traceback.format_exc()}")
-            return Response({
-                'error': f'Erreur interne: {str(e)}',
-                'debug': traceback.format_exc() if settings.DEBUG else None
-            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 class RequestPasswordResetView(APIView):
@@ -527,43 +324,74 @@ class FacebookLoginView(APIView):
 
 
 
-# Configuration du logger
-logger = logging.getLogger(__name__)
+class CreerProfilVendeurView(APIView):
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        user_id = request.session.get('user_id')
+        if not user_id:
+            return Response({"error": "Non connecté."}, status=401)
+
+        try:
+            utilisateur = Utilisateur.objects.get(id_utilisateur=user_id)
+            profil = utilisateur.profil_vendeur
+            serializer = ProfilVendeurSerializer(profil)
+            return Response(serializer.data, status=200)
+        except Utilisateur.DoesNotExist:
+            return Response({"error": "Utilisateur non trouvé."}, status=401)
+        except ProfilVendeur.DoesNotExist:
+            return Response({"detail": "Profil vendeur introuvable."}, status=404)
+
+    def post(self, request):
+        # Vérification session
+        user_id = request.session.get('user_id')
+        if not user_id:
+            return Response({"error": "Vous devez être connecté pour créer une boutique."}, status=401)
+
+        try:
+            #  Récupération utilisateur
+            utilisateur = Utilisateur.objects.get(id_utilisateur=user_id)
+        except Utilisateur.DoesNotExist:
+            return Response({"error": "Utilisateur invalide."}, status=401)
+
+        # Vérification type vendeur
+        if utilisateur.type_utilisateur != 'vendeur':
+            return Response({"error": "Seuls les vendeurs peuvent créer un profil boutique."}, status=403)
+
+        # Vérification profil existant
+        if hasattr(utilisateur, 'profil_vendeur'):
+            return Response({"error": "Le profil vendeur existe déjà."}, status=400)
+
+        # Validation données
+        serializer = ProfilVendeurSerializer(data=request.data)
+        if serializer.is_valid():
+            try:
+                # Création profil avec utilisateur
+                profil = serializer.save(utilisateur=utilisateur)
+                return Response(ProfilVendeurSerializer(profil).data, status=201)
+            except Exception as e:
+                return Response({
+                    "error": "Erreur lors de la création du profil.",
+                    "detail": str(e)
+                }, status=500)
+        else:
+            return Response(serializer.errors, status=400)
 
 
-# ===========================
-# VIEWSETS PRINCIPAUX
-# ===========================
 
 
-# myapp/views.py - Views spécifiques aux clients
+class VendeurInfoView(APIView):
+    permission_classes = [AllowAny]
 
-from django.db import transaction
-from django.utils import timezone
-from rest_framework import viewsets, status, filters
-from rest_framework.decorators import action
-from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated, AllowAny
-from django_filters.rest_framework import DjangoFilterBackend
-from django.db.models import Q, Avg, Count
-from .models import (
-    Produit, Categorie, Panier, Favori, Commande, 
-    DetailCommande, Avis, DetailsClient, SpecificationProduit
-)
-from .serializers import (
-    ClientProduitSerializer, 
-    ClientCategorieSerializer,
-    PanierSerializer,
-    PanierCreateSerializer, 
-    FavoriSerializer,
-    AvisSerializer,  ClientCommandeSerializer,
-    AvisCreateSerializer,
-    CommandeCreateSerializer, 
-    DetailsClientSerializer
-)
-import logging
+    def get(self, request):
+        user_id = request.session.get('user_id')
+        if not user_id:
+            return Response({"error": "Non connecté."}, status=401)
 
-logger = logging.getLogger(__name__)
+        try:
+            utilisateur = Utilisateur.objects.get(id_utilisateur=user_id)
+        except Utilisateur.DoesNotExist:
+            return Response({"error": "Utilisateur non trouvé."}, status=401)
 
 class ClientProduitViewSet(viewsets.ReadOnlyModelViewSet):
     """ViewSet pour les produits côté client (lecture seule)"""

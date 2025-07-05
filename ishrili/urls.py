@@ -1,4 +1,4 @@
-# ✅ 2. MODIFIER ishrili/urls.py (urls.py du projet principal)
+#  2. MODIFIER ishrili/urls.py (urls.py du projet principal)
 
 from django.contrib import admin
 from django.urls import path, include
@@ -29,11 +29,11 @@ urlpatterns = [
     path('api/', include('myapp.urls')),
 ]
 
-# ✅ ESSENTIEL : Servir les fichiers media en développement
+#  ESSENTIEL : Servir les fichiers media en développement
 if settings.DEBUG:
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
     urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
     
-    # ✅ AJOUT : Log pour debug
-    print(f"🖼️  MEDIA_URL: {settings.MEDIA_URL}")
-    print(f"📁 MEDIA_ROOT: {settings.MEDIA_ROOT}")
+    #  AJOUT : Log pour debug
+    print(f"  MEDIA_URL: {settings.MEDIA_URL}")
+    print(f" MEDIA_ROOT: {settings.MEDIA_ROOT}")
