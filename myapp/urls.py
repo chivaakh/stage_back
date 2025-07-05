@@ -2,7 +2,7 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from .views import (
-    CreerProfilVendeurView, ProduitViewSet, ImageProduitViewSet, SpecificationProduitViewSet,
+    CreerProfilVendeurView, ProduitViewSet, ImageProduitViewSet, SignupView, SpecificationProduitViewSet,
     MouvementStockViewSet, CategorieViewSet, NotificationViewSet,
     # ClientProduitViewSet, ClientCategorieViewSet, PanierViewSet,
     # FavoriViewSet, AvisViewSet, ClientCommandeViewSet, ClientProfilViewSet,
@@ -25,7 +25,7 @@ router = DefaultRouter()
 # router.register(r'client/categories', ClientCategorieViewSet, basename='client-categories')
 # router.register(r'client/panier', PanierViewSet, basename='panier')
 # router.register(r'client/favoris', FavoriViewSet, basename='favoris')
-# router.register(r'client/avis', AvisViewSet, basename='avis')
+# router.register(r'client/avis', Av isViewSet, basename='avis')
 # router.register(r'client/commandes', ClientCommandeViewSet, basename='client-commandes')
 # router.register(r'client/profil', ClientProfilViewSet, basename='client-profil')
 
@@ -43,13 +43,11 @@ urlpatterns = [
     # Router URLs
     path('', include(router.urls)),
     path('upload-image/', upload_image, name='upload-image'),
-
-    
-    # Auth URLs - Supprimé la route 'api/signup/' qui utilisait SignupView
+    path('api/signup/', SignupView.as_view(), name='signup'),
     path('api/login/', LoginView.as_view(), name='login'),
     path('api/request-password-reset/', RequestPasswordResetView.as_view(), name='request-password-reset'),
     path('api/reset-password/<uuid:token>/', ResetPasswordView.as_view(), name='reset-password'),
-    path('api/login/google/', GoogleLoginView.as_view(), name='google-login'),
+    path("api/login/google/", GoogleLoginView.as_view(), name="google-login"),
     path('api/facebook-login/', FacebookLoginView.as_view(), name='facebook-login'),
     path('api/profil-vendeur/', CreerProfilVendeurView.as_view(), name='profil_vendeur'),
     path('api/vendeur-info/', VendeurInfoView.as_view(), name='vendeur_info'),

@@ -1,105 +1,58 @@
-# myapp/views.py - VERSION FINALE COMPLÈTE ET CORRIGÉE ✅
+# myapp/views.py - VERSION FINALE COMPLÈTE ET ORGANISEE
 
-from django.utils import timezone
-# Imports groupés et organisés
-# myapp/views.py - VERSION COMPLÈTE avec tous les ViewSets
-from rest_framework import viewsets, status
-from rest_framework.decorators import action
-from rest_framework.response import Response
-from django.db import transaction
-from .models import Produit, ImageProduit, SpecificationProduit, Utilisateur, PasswordResetToken, ProfilVendeur
-from .serializers import ProduitSerializer, ImageProduitSerializer, SpecificationProduitSerializer , SignupSerializer, LoginSerializer, ProfilVendeurSerializer
-import logging
+# Python standard libraries
 import os
 import uuid
+import json
 import logging
 import traceback
-from .models import DetailsClient,DetailCommande,DetailsCommercant
+import requests
 
+# Django core imports
+from django.utils import timezone
+from django.utils.crypto import get_random_string
+from django.utils.decorators import method_decorator
+from django.views.decorators.csrf import csrf_exempt
 from django.conf import settings
 from django.db import transaction
+from django.db.models import Q, Avg, Count
 from django.http import JsonResponse
-from django.views.decorators.csrf import csrf_exempt
-
-from rest_framework import viewsets, status
-from rest_framework.decorators import action, api_view
-from rest_framework.response import Response
-from rest_framework.permissions import AllowAny
-from django.conf import settings
-from .models import Utilisateur
-# Imports locaux
-from .models import (
-    Produit, ImageProduit, SpecificationProduit, MouvementStock,
-    Categorie, Notification, Commande, DetailCommande
-)
-from .serializers import (
-    ProduitSerializer, ImageProduitSerializer, SpecificationProduitSerializer,
-    MouvementStockSerializer, CategorieSerializer, NotificationSerializer,
-    CommandeSerializer, DetailCommandeSerializer
-)
-from django.utils.decorators import method_decorator
-from rest_framework.decorators import api_view
-from rest_framework.response import Response
-from rest_framework import status
-import uuid
-from rest_framework.views import APIView
-logger = logging.getLogger(__name__)
-from rest_framework import viewsets
-# from rest_framework.permissions import IsAuthenticated
-from rest_framework.permissions import AllowAny 
-from . import serializers
-from django.contrib.auth.hashers import check_password
-from django.db.models import Q
 from django.core.mail import send_mail
-from django.contrib.auth.hashers import make_password
+from django.shortcuts import render
+from django.contrib.auth.hashers import make_password, check_password
+
+# Django REST framework imports
+from rest_framework import viewsets, status, filters
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework.decorators import action, api_view
+from rest_framework.permissions import AllowAny, IsAuthenticated
+from django_filters.rest_framework import DjangoFilterBackend
+
+# Google OAuth
 from google.oauth2 import id_token
 from google.auth.transport import requests as google_requests
-from django.db import transaction
-import requests
-from django.utils.crypto import get_random_string
-from rest_framework.permissions import IsAuthenticated
 
-
-from .serializers import SignupWithDetailsSerializer
-from rest_framework.permissions import AllowAny
-from rest_framework.response import Response
-from rest_framework import status
-
-
-# Dans views.py - Vue SignupWithDetails corrigée
-from rest_framework.views import APIView
-from rest_framework.permissions import AllowAny
-from rest_framework.response import Response
-from rest_framework import status
-from django.db import transaction
-from django.contrib.auth.hashers import make_password
-import traceback
-import json
-
-
-from django.db import transaction
-from django.utils import timezone
-from rest_framework import viewsets, status, filters
-from rest_framework.decorators import action
-from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated, AllowAny
-from django_filters.rest_framework import DjangoFilterBackend
-from django.db.models import Q, Avg, Count
+# Local models
 from .models import (
-    Produit, Categorie, Panier, Favori, Commande, 
-    DetailCommande, Avis, DetailsClient, SpecificationProduit
+    Utilisateur, ProfilVendeur, PasswordResetToken,
+    Produit, ImageProduit, SpecificationProduit, MouvementStock,
+    Categorie, Notification, Commande, DetailCommande,
+    Panier, Favori, Avis, DetailsClient, DetailCommande, DetailsCommercant
 )
-from .serializers import (
-    # ClientProduitSerializer, 
-    # ClientCategorieSerializer,
-    # PanierSerializer, PanierCreateSerializer, 
-    # FavoriSerializer,
-    # AvisSerializer, AvisCreateSerializer, ClientCommandeSerializer,
-    # CommandeCreateSerializer, 
-    DetailsClientSerializer
-)
-import logging
 
+# Local serializers
+from .serializers import (
+    SignupSerializer, LoginSerializer, ProfilVendeurSerializer,
+    ProduitSerializer, ImageProduitSerializer, SpecificationProduitSerializer,
+    MouvementStockSerializer, CategorieSerializer, NotificationSerializer,
+    CommandeSerializer, DetailCommandeSerializer, DetailsClientSerializer,
+    SignupWithDetailsSerializer
+)
+from myapp import serializers
+
+# Logger configuration
+logger = logging.getLogger(__name__)
 
 
 
@@ -113,7 +66,12 @@ class SignupView(APIView):
 
     def post(self, request):
         try:
-            serializer = SignupSerializer(data=request.data, context={'request': request})  # FIX ICI
+            # Nettoyer les données : convertir email vide en None
+            data = request.data.copy()
+            if data.get('email') == '':
+                data['email'] = None
+                
+            serializer = SignupSerializer(data=data, context={'request': request})
             if serializer.is_valid(raise_exception=True):
                 serializer.save()
                 return Response({"message": "Utilisateur créé avec succès"}, status=status.HTTP_201_CREATED)
@@ -126,7 +84,7 @@ class SignupView(APIView):
                 "error": str(e),
                 "trace": traceback_str
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-        
+
 
 
 
@@ -154,7 +112,6 @@ class LoginView(APIView):
         request.session['user_id'] = utilisateur.id_utilisateur  # stocker l'id dans la session
 
         return Response({"message": "Connexion réussie"}, status=200)
-
 
 
 
@@ -227,33 +184,29 @@ class GoogleLoginView(APIView):
             return Response({"error": "Token requis"}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            # Valider le token Google et récupérer les infos utilisateur
             idinfo = id_token.verify_oauth2_token(token, google_requests.Request(), "128897548037-fi6qsoqngat2rg46apt6pq6tfspbfcp3.apps.googleusercontent.com")
 
-            # idinfo contient les infos utilisateur validées
             email = idinfo.get("email")
             nom = idinfo.get("family_name") or ""
             prenom = idinfo.get("given_name") or ""
-            google_sub = idinfo.get("sub")  # id Google unique
+            google_sub = idinfo.get("sub")
 
             if not email:
                 return Response({"error": "Email non trouvé dans le token"}, status=status.HTTP_400_BAD_REQUEST)
 
-            # Recherche ou création utilisateur dans ta base
             with transaction.atomic():
                 telephone_temporaire = f"google_{get_random_string(length=10)}"
                 utilisateur, created = Utilisateur.objects.get_or_create(
-                    email=email,
+                    email=email,  # Email sera jamais None ici car vient de Google
                     defaults={
                         "nom": nom,
                         "prenom": prenom,
-                        "telephone": telephone_temporaire,  # tu peux gérer ça comme tu veux
-                        "mot_de_passe": make_password(google_sub),  # hash d'une valeur unique Google
-                        "type_utilisateur": "vendeur",  # ou ce que tu veux par défaut
+                        "telephone": telephone_temporaire,
+                        "mot_de_passe": make_password(google_sub),
+                        "type_utilisateur": "vendeur",
                     },
                 )
 
-            # Ici tu peux créer une session manuelle ou un JWT selon ton auth backend
             request.session['user_id'] = utilisateur.id_utilisateur
 
             return Response({
@@ -265,9 +218,6 @@ class GoogleLoginView(APIView):
                 }
             }, status=status.HTTP_200_OK)
 
-        # except ValueError:
-        #     # Token invalide
-        #     return Response({"error": "Token invalide"}, status=status.HTTP_400_BAD_REQUEST)
         except ValueError as e:
             import traceback
             print("Erreur Google token :", e)
@@ -287,7 +237,6 @@ class FacebookLoginView(APIView):
         if not access_token or not email:
             return Response({"error": "Token et email requis"}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Valider le token Facebook
         url = f'https://graph.facebook.com/me?access_token={access_token}&fields=email,name'
         response = requests.get(url)
         if response.status_code != 200:
@@ -299,13 +248,13 @@ class FacebookLoginView(APIView):
             return Response({"error": "Nom non trouvé dans le token"}, status=status.HTTP_400_BAD_REQUEST)
 
         with transaction.atomic():
+            # Email sera jamais None ici car requis pour Facebook
             utilisateur, created = Utilisateur.objects.get_or_create(email=email)
-            # Met à jour les infos à chaque login Facebook
             utilisateur.nom = name.split(" ")[-1]
             utilisateur.prenom = " ".join(name.split(" ")[:-1])
             if not utilisateur.telephone:
-                utilisateur.telephone = ""  # ou une valeur par défaut si tu veux
-            utilisateur.mot_de_passe = make_password(email)  # idéalement, un mot de passe généré ou token
+                utilisateur.telephone = ""
+            utilisateur.mot_de_passe = make_password(email)
             if not utilisateur.type_utilisateur:
                 utilisateur.type_utilisateur = "vendeur"
             utilisateur.save()
@@ -379,6 +328,7 @@ class CreerProfilVendeurView(APIView):
 
 
 
+# Ajoutez cette nouvelle vue dans votre views.py
 
 class VendeurInfoView(APIView):
     permission_classes = [AllowAny]

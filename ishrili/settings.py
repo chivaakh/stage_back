@@ -32,8 +32,9 @@ ALLOWED_HOSTS = [
     '192.168.100.9',   # Votre IP locale Wi-Fi
     '192.168.56.1', # Votre IP Ethernet (VirtualBox/VMware)
     '192.168.100.79',
+    '10.0.2.15',     
+    '10.0.2.1',        
     '0.0.0.0',
-    
 ]
 
 

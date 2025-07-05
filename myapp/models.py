@@ -30,6 +30,12 @@ class Utilisateur(models.Model):
     methode_verification = models.CharField(max_length=10, choices=METHODE_VERIFICATION_CHOICES, null=True, blank=True)
     est_actif = models.BooleanField(default=True)
 
+    def save(self, *args, **kwargs):
+        # Convertir email vide en None pour respecter l'unicité
+        if self.email == '':
+            self.email = None
+        super().save(*args, **kwargs)
+
     def __str__(self):
         return f"{self.nom or ''} ({self.telephone})"
 

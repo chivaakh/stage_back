@@ -15,7 +15,7 @@ class SignupSerializer(serializers.ModelSerializer):
     prenom = serializers.CharField(write_only=True, required=True)
     nom = serializers.CharField(required=False, allow_blank=True)
     mot_de_passe = serializers.CharField(write_only=True, required=True, min_length=6)
-    email = serializers.EmailField(required=False, allow_blank=True)
+    email = serializers.EmailField(required=False, allow_blank=True, allow_null=True)  #  AJOUT DE allow_null=True
     telephone = serializers.CharField(required=True)
 
     class Meta:
@@ -25,6 +25,14 @@ class SignupSerializer(serializers.ModelSerializer):
     def validate(self, data):
         if not data.get('email') and not data.get('telephone'):
             raise serializers.ValidationError("Email ou téléphone doit être renseigné.")
+        
+        # Gérer l'email : convertir vide ou None en None
+        email = data.get('email')
+        if email is None or email.strip() == '':
+            data['email'] = None
+        else:
+            data['email'] = email.strip()
+            
         return data
 
     def create(self, validated_data):
@@ -35,6 +43,11 @@ class SignupSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("Le type d'utilisateur est requis et doit être 'client' ou 'vendeur'.")
 
         mot_de_passe = validated_data.pop('mot_de_passe')
+        
+        # S'assurer que email vide devient None
+        if validated_data.get('email') == '':
+            validated_data['email'] = None
+            
         utilisateur = Utilisateur(**validated_data)
         utilisateur.mot_de_passe = make_password(mot_de_passe)
         utilisateur.type_utilisateur = type_utilisateur
