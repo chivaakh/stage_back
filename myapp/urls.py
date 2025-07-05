@@ -4,8 +4,9 @@ from rest_framework.routers import DefaultRouter
 from .views import (
     ProduitViewSet, ImageProduitViewSet, SpecificationProduitViewSet,
     MouvementStockViewSet, CategorieViewSet, NotificationViewSet,
-    # ClientProduitViewSet, ClientCategorieViewSet, PanierViewSet,
-    # FavoriViewSet, AvisViewSet, ClientCommandeViewSet, ClientProfilViewSet,
+    ClientProduitViewSet, ClientCategorieViewSet, 
+    PanierViewSet,
+    FavoriViewSet, AvisViewSet, ClientCommandeViewSet, ClientProfilViewSet,
     CommandeViewSet, DetailCommandeViewSet,
     # API Views - ✅ Supprimé SignupView qui n'existe pas
     SignupWithDetailsView, LoginView,
@@ -19,13 +20,13 @@ from .views import (
 router = DefaultRouter()
 
 # Frontend client routes
-# router.register(r'client/produits', ClientProduitViewSet, basename='client-produits')
-# router.register(r'client/categories', ClientCategorieViewSet, basename='client-categories')
-# router.register(r'client/panier', PanierViewSet, basename='panier')
-# router.register(r'client/favoris', FavoriViewSet, basename='favoris')
-# router.register(r'client/avis', AvisViewSet, basename='avis')
-# router.register(r'client/commandes', ClientCommandeViewSet, basename='client-commandes')
-# router.register(r'client/profil', ClientProfilViewSet, basename='client-profil')
+router.register(r'client/produits', ClientProduitViewSet, basename='client-produits')
+router.register(r'client/categories', ClientCategorieViewSet, basename='client-categories')
+router.register(r'client/panier', PanierViewSet, basename='panier')
+router.register(r'client/favoris', FavoriViewSet, basename='favoris')
+router.register(r'client/avis', AvisViewSet, basename='avis')
+router.register(r'client/commandes', ClientCommandeViewSet, basename='client-commandes')
+router.register(r'client/profil', ClientProfilViewSet, basename='client-profil')
 
 # Admin or shared routes
 router.register(r'produits', ProduitViewSet, basename='produit')

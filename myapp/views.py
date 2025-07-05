@@ -551,401 +551,577 @@ from .models import (
     DetailCommande, Avis, DetailsClient, SpecificationProduit
 )
 from .serializers import (
-    # ClientProduitSerializer, 
-    # ClientCategorieSerializer,
-    # PanierSerializer, PanierCreateSerializer, 
-    # FavoriSerializer,
-    # AvisSerializer, AvisCreateSerializer, ClientCommandeSerializer,
-    # CommandeCreateSerializer, 
+    ClientProduitSerializer, 
+    ClientCategorieSerializer,
+    PanierSerializer,
+    PanierCreateSerializer, 
+    FavoriSerializer,
+    AvisSerializer,  ClientCommandeSerializer,
+    AvisCreateSerializer,
+    CommandeCreateSerializer, 
     DetailsClientSerializer
 )
 import logging
 
 logger = logging.getLogger(__name__)
 
-# class ClientProduitViewSet(viewsets.ReadOnlyModelViewSet):
-#     """ViewSet pour les produits côté client (lecture seule)"""
-#     serializer_class = ClientProduitSerializer
-#     permission_classes = [AllowAny]
-#     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
-#     filterset_fields = ['categorie', 'commercant']
-#     search_fields = ['nom', 'description', 'reference']
-#     ordering_fields = ['nom', 'id']
-#     ordering = ['nom']
+class ClientProduitViewSet(viewsets.ReadOnlyModelViewSet):
+    """ViewSet pour les produits côté client (lecture seule)"""
+    serializer_class = ClientProduitSerializer
+    permission_classes = [AllowAny]
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    filterset_fields = ['categorie', 'commercant']
+    search_fields = ['nom', 'description', 'reference']
+    ordering_fields = ['nom', 'id']
+    ordering = ['nom']
 
-#     def get_queryset(self):
-#         return Produit.objects.prefetch_related(
-#             'imageproduit_set', 'specificationproduit_set', 'avis_set'
-#         ).select_related('categorie', 'commercant').filter(
-#             # Seulement les produits avec du stock
-#             specificationproduit__quantite_stock__gt=0
-#         ).distinct()
+    def get_queryset(self):
+        return Produit.objects.prefetch_related(
+            'imageproduit_set', 'specificationproduit_set', 'avis_set'
+        ).select_related('categorie', 'commercant').filter(
+            # Seulement les produits avec du stock
+            specificationproduit__quantite_stock__gt=0
+        ).distinct()
 
-#     @action(detail=False, methods=['get'])
-#     def recherche(self, request):
-#         """Recherche avancée de produits"""
-#         query = request.query_params.get('q', '')
-#         prix_min = request.query_params.get('prix_min')
-#         prix_max = request.query_params.get('prix_max')
-#         categorie_id = request.query_params.get('categorie')
+    @action(detail=False, methods=['get'])
+    def recherche(self, request):
+        """Recherche avancée de produits"""
+        query = request.query_params.get('q', '')
+        prix_min = request.query_params.get('prix_min')
+        prix_max = request.query_params.get('prix_max')
+        categorie_id = request.query_params.get('categorie')
         
-#         queryset = self.get_queryset()
+        queryset = self.get_queryset()
         
-#         if query:
-#             queryset = queryset.filter(
-#                 Q(nom__icontains=query) | 
-#                 Q(description__icontains=query) |
-#                 Q(reference__icontains=query)
-#             )
+        if query:
+            queryset = queryset.filter(
+                Q(nom__icontains=query) | 
+                Q(description__icontains=query) |
+                Q(reference__icontains=query)
+            )
         
-#         if prix_min:
-#             queryset = queryset.filter(specificationproduit__prix__gte=prix_min)
+        if prix_min:
+            queryset = queryset.filter(specificationproduit__prix__gte=prix_min)
         
-#         if prix_max:
-#             queryset = queryset.filter(specificationproduit__prix__lte=prix_max)
+        if prix_max:
+            queryset = queryset.filter(specificationproduit__prix__lte=prix_max)
         
-#         if categorie_id:
-#             queryset = queryset.filter(categorie_id=categorie_id)
+        if categorie_id:
+            queryset = queryset.filter(categorie_id=categorie_id)
         
-#         # Pagination
-#         page = self.paginate_queryset(queryset.distinct())
-#         if page is not None:
-#             serializer = self.get_serializer(page, many=True)
-#             return self.get_paginated_response(serializer.data)
+        # Pagination
+        page = self.paginate_queryset(queryset.distinct())
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
         
-#         serializer = self.get_serializer(queryset.distinct(), many=True)
-#         return Response(serializer.data)
+        serializer = self.get_serializer(queryset.distinct(), many=True)
+        return Response(serializer.data)
 
-#     @action(detail=False, methods=['get'])
-#     def nouveaute(self, request):
-#         """Récupère les nouveaux produits (derniers 30 jours)"""
-#         from datetime import timedelta
-#         date_limite = timezone.now() - timedelta(days=30)
+    @action(detail=False, methods=['get'])
+    def nouveaute(self, request):
+        """Récupère les nouveaux produits (derniers 30 jours)"""
+        from datetime import timedelta
+        date_limite = timezone.now() - timedelta(days=30)
         
-#         queryset = self.get_queryset().filter(
-#             # Simuler date_creation avec l'ID (plus récent = ID plus élevé)
-#             id__gte=self.get_queryset().order_by('-id').first().id - 50
-#         )[:20]
+        queryset = self.get_queryset().filter(
+            # Simuler date_creation avec l'ID (plus récent = ID plus élevé)
+            id__gte=self.get_queryset().order_by('-id').first().id - 50
+        )[:20]
         
-#         serializer = self.get_serializer(queryset, many=True)
-#         return Response(serializer.data)
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data)
 
-#     @action(detail=False, methods=['get'])
-#     def populaires(self, request):
-#         """Récupère les produits populaires (plus d'avis)"""
-#         queryset = self.get_queryset().annotate(
-#             nb_avis=Count('avis')
-#         ).filter(nb_avis__gt=0).order_by('-nb_avis')[:20]
+    @action(detail=False, methods=['get'])
+    def populaires(self, request):
+        """Récupère les produits populaires (plus d'avis)"""
+        queryset = self.get_queryset().annotate(
+            nb_avis=Count('avis')
+        ).filter(nb_avis__gt=0).order_by('-nb_avis')[:20]
         
-#         serializer = self.get_serializer(queryset, many=True)
-#         return Response(serializer.data)
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data)
 
-#     @action(detail=True, methods=['get'])
-#     def avis(self, request, pk=None):
-#         """Récupère tous les avis d'un produit"""
-#         produit = self.get_object()
-#         avis = Avis.objects.filter(produit=produit).order_by('-date_creation')
-#         serializer = AvisSerializer(avis, many=True)
-#         return Response(serializer.data)
+    @action(detail=True, methods=['get'])
+    def avis(self, request, pk=None):
+        """Récupère tous les avis d'un produit"""
+        produit = self.get_object()
+        avis = Avis.objects.filter(produit=produit).order_by('-date_creation')
+        serializer = AvisSerializer(avis, many=True)
+        return Response(serializer.data)
 
-# class ClientCategorieViewSet(viewsets.ReadOnlyModelViewSet):
-#     """ViewSet pour les catégories côté client"""
-#     queryset = Categorie.objects.all()
-#     serializer_class = ClientCategorieSerializer
-#     permission_classes = [AllowAny]
+class ClientCategorieViewSet(viewsets.ReadOnlyModelViewSet):
+    """ViewSet pour les catégories côté client"""
+    queryset = Categorie.objects.all()
+    serializer_class = ClientCategorieSerializer
+    permission_classes = [AllowAny]
     
-#     @action(detail=True, methods=['get'])
-#     def produits(self, request, pk=None):
-#         """Récupère tous les produits d'une catégorie"""
-#         categorie = self.get_object()
-#         produits = Produit.objects.filter(categorie=categorie).prefetch_related(
-#             'imageproduit_set', 'specificationproduit_set'
-#         )
+    @action(detail=True, methods=['get'])
+    def produits(self, request, pk=None):
+        """Récupère tous les produits d'une catégorie"""
+        categorie = self.get_object()
+        produits = Produit.objects.filter(categorie=categorie).prefetch_related(
+            'imageproduit_set', 'specificationproduit_set'
+        )
         
-#         # Pagination
-#         page = self.paginate_queryset(produits)
-#         if page is not None:
-#             serializer = ClientProduitSerializer(page, many=True)
-#             return self.get_paginated_response(serializer.data)
+        # Pagination
+        page = self.paginate_queryset(produits)
+        if page is not None:
+            serializer = ClientProduitSerializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
         
-#         serializer = ClientProduitSerializer(produits, many=True)
-#         return Response(serializer.data)
+        serializer = ClientProduitSerializer(produits, many=True)
+        return Response(serializer.data)
 
-# class PanierViewSet(viewsets.ModelViewSet):
-#     """ViewSet pour la gestion du panier"""
-#     serializer_class = PanierSerializer
-#     permission_classes = [IsAuthenticated]
+# 
+# SOLUTION TEMPORAIRE - Dans votre views.py
+
+# Option 1: TEMPORAIRE pour tester - Changer les permissions
+from rest_framework.permissions import AllowAny
+
+class PanierViewSet(viewsets.ModelViewSet):
+    """ViewSet pour la gestion du panier"""
+    serializer_class = PanierSerializer
+    permission_classes = [AllowAny]  # ✅ TEMPORAIRE
     
-#     def get_queryset(self):
-#         # Récupérer seulement les articles du panier du client connecté
-#         try:
-#             client = self.request.user.detailsclient
-#             return Panier.objects.filter(client=client).select_related(
-#                 'specification', 'specification__produit'
-#             ).prefetch_related('specification__produit__imageproduit_set')
-#         except:
-#             return Panier.objects.none()
-    
-#     def get_serializer_class(self):
-#         if self.action in ['create', 'update', 'partial_update']:
-#             return PanierCreateSerializer
-#         return PanierSerializer
-    
-#     def perform_create(self, serializer):
-#         try:
-#             client = self.request.user.detailsclient
-#             specification = serializer.validated_data['specification']
-#             quantite = serializer.validated_data['quantite']
+    def get_queryset(self):
+        """Récupérer les articles du panier du premier client disponible"""
+        try:
+            # ✅ UTILISER LE PREMIER CLIENT DISPONIBLE
+            client = DetailsClient.objects.first()
+            if not client:
+                return Panier.objects.none()
             
-#             # Vérifier si l'article existe déjà dans le panier
-#             panier_existant = Panier.objects.filter(
-#                 client=client, 
-#                 specification=specification
-#             ).first()
-            
-#             if panier_existant:
-#                 # Mettre à jour la quantité
-#                 panier_existant.quantite += quantite
-#                 panier_existant.save()
-#                 return panier_existant
-#             else:
-#                 # Créer nouvel article
-#                 return serializer.save(client=client)
+            return Panier.objects.filter(client=client).select_related(
+                'specification', 'specification__produit'
+            ).prefetch_related('specification__produit__imageproduit_set')
+        except:
+            return Panier.objects.none()
+    
+    def get_serializer_class(self):
+        if self.action in ['create', 'update', 'partial_update']:
+            return PanierCreateSerializer
+        return PanierSerializer
+    
+    def perform_create(self, serializer):
+        """Ajouter un produit au panier"""
+        try:
+            # ✅ UTILISER LE PREMIER CLIENT DISPONIBLE
+            client = DetailsClient.objects.first()
+            if not client:
+                raise Exception("Aucun client trouvé dans la base de données")
                 
-#         except Exception as e:
-#             logger.error(f"Erreur ajout panier: {str(e)}")
-#             raise serializer.ValidationError("Erreur lors de l'ajout au panier")
-    
-#     @action(detail=False, methods=['get'])
-#     def resume(self, request):
-#         """Récupère le résumé du panier"""
-#         try:
-#             client = request.user.detailsclient
-#             panier_items = self.get_queryset()
+            specification = serializer.validated_data['specification']
+            quantite = serializer.validated_data['quantite']
             
-#             total_items = sum(item.quantite for item in panier_items)
-#             total_prix = sum(
-#                 (item.specification.prix_promo or item.specification.prix) * item.quantite 
-#                 for item in panier_items
-#             )
+            # Vérifier si l'article existe déjà
+            panier_existant = Panier.objects.filter(
+                client=client, 
+                specification=specification
+            ).first()
             
-#             return Response({
-#                 'total_items': total_items,
-#                 'total_prix': float(total_prix),
-#                 'nombre_articles': panier_items.count()
-#             })
-#         except:
-#             return Response({
-#                 'total_items': 0,
-#                 'total_prix': 0.0,
-#                 'nombre_articles': 0
-#             })
+            if panier_existant:
+                # Mettre à jour la quantité existante
+                nouvelle_quantite = panier_existant.quantite + quantite
+                
+                # Vérifier le stock
+                if nouvelle_quantite > specification.quantite_stock:
+                    raise Exception(
+                        f"Stock insuffisant. Disponible: {specification.quantite_stock}, "
+                        f"déjà dans panier: {panier_existant.quantite}"
+                    )
+                
+                panier_existant.quantite = nouvelle_quantite
+                panier_existant.save()
+                return panier_existant
+            else:
+                # Créer nouvel article
+                return serializer.save(client=client)
+                
+        except Exception as e:
+            logger.error(f"Erreur ajout panier: {str(e)}")
+            raise Exception(f"Erreur lors de l'ajout au panier: {str(e)}")
     
-#     @action(detail=False, methods=['post'])
-#     def vider(self, request):
-#         """Vide complètement le panier"""
-#         try:
-#             client = request.user.detailsclient
-#             count = Panier.objects.filter(client=client).count()
-#             Panier.objects.filter(client=client).delete()
-#             return Response({
-#                 'message': f'{count} articles supprimés du panier'
-#             })
-#         except:
-#             return Response(
-#                 {'error': 'Erreur lors du vidage du panier'}, 
-#                 status=status.HTTP_400_BAD_REQUEST
-#             )
+    def perform_update(self, serializer):
+        """Mettre à jour la quantité d'un article"""
+        try:
+            client = DetailsClient.objects.first()
+            if not client:
+                raise Exception("Aucun client trouvé")
+            if serializer.instance.client != client:
+                raise Exception("Vous ne pouvez modifier que vos articles")
+            serializer.save()
+        except Exception as e:
+            logger.error(f"Erreur modification panier: {str(e)}")
+            raise Exception(f"Erreur lors de la modification: {str(e)}")
+    
+    def perform_destroy(self, instance):
+        """Supprimer un article du panier"""
+        try:
+            client = DetailsClient.objects.first()
+            if not client:
+                raise Exception("Aucun client trouvé")
+            if instance.client != client:
+                raise Exception("Vous ne pouvez supprimer que vos articles")
+            instance.delete()
+        except Exception as e:
+            logger.error(f"Erreur suppression panier: {str(e)}")
+            raise Exception(f"Erreur lors de la suppression: {str(e)}")
+    
+    @action(detail=False, methods=['get'])
+    def resume(self, request):
+        """Récupère le résumé du panier"""
+        try:
+            client = DetailsClient.objects.first()
+            if not client:
+                return Response({
+                    'total_items': 0,
+                    'total_prix': 0.0,
+                    'nombre_articles': 0,
+                    'articles': []
+                })
+                
+            panier_items = self.get_queryset()
+            
+            total_items = sum(item.quantite for item in panier_items)
+            total_prix = sum(
+                (item.specification.prix_promo or item.specification.prix) * item.quantite 
+                for item in panier_items
+            )
+            
+            return Response({
+                'total_items': total_items,
+                'total_prix': float(total_prix),
+                'nombre_articles': panier_items.count(),
+                'articles': PanierSerializer(panier_items, many=True).data
+            })
+        except Exception as e:
+            logger.error(f"Erreur résumé panier: {str(e)}")
+            return Response({
+                'total_items': 0,
+                'total_prix': 0.0,
+                'nombre_articles': 0,
+                'articles': []
+            })
+    
+    @action(detail=False, methods=['post'])
+    def vider(self, request):
+        """Vide complètement le panier"""
+        try:
+            client = DetailsClient.objects.first()
+            if not client:
+                return Response(
+                    {'error': 'Client non trouvé', 'success': False}, 
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+                
+            count = Panier.objects.filter(client=client).count()
+            Panier.objects.filter(client=client).delete()
+            return Response({
+                'message': f'{count} articles supprimés du panier',
+                'success': True
+            })
+        except Exception as e:
+            logger.error(f"Erreur vidage panier: {str(e)}")
+            return Response(
+                {'error': 'Erreur lors du vidage du panier', 'success': False}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
-# class FavoriViewSet(viewsets.ModelViewSet):
-#     """ViewSet pour la gestion des favoris"""
-#     serializer_class = FavoriSerializer
-#     permission_classes = [IsAuthenticated]
-    
-#     def get_queryset(self):
-#         try:
-#             client = self.request.user.detailsclient
-#             return Favori.objects.filter(client=client).select_related(
-#                 'produit', 'produit__categorie'
-#             ).prefetch_related('produit__imageproduit_set')
-#         except:
-#             return Favori.objects.none()
-    
-#     def perform_create(self, serializer):
-#         try:
-#             client = self.request.user.detailsclient
-#             produit = serializer.validated_data['produit']
+    @action(detail=False, methods=['post'])
+    def ajouter_rapide(self, request):
+        """Ajouter rapidement un produit avec sa spécification par défaut"""
+        try:
+            produit_id = request.data.get('produit_id')
+            quantite = request.data.get('quantite', 1)
             
-#             # Vérifier si déjà en favori
-#             if Favori.objects.filter(client=client, produit=produit).exists():
-#                 raise serializers.ValidationError("Produit déjà dans les favoris")
+            logger.info(f"Tentative ajout produit {produit_id}, quantité {quantite}")
             
-#             serializer.save(client=client)
-#         except Exception as e:
-#             raise serializers.ValidationError(str(e))
-    
-#     @action(detail=False, methods=['post'])
-#     def toggle(self, request):
-#         """Ajouter/retirer un produit des favoris"""
-#         produit_id = request.data.get('produit_id')
-#         if not produit_id:
-#             return Response(
-#                 {'error': 'produit_id requis'}, 
-#                 status=status.HTTP_400_BAD_REQUEST
-#             )
+            if not produit_id:
+                return Response(
+                    {'error': 'ID produit requis', 'success': False}, 
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            # ✅ VÉRIFIER QU'UN CLIENT EXISTE
+            client = DetailsClient.objects.first()
+            if not client:
+                return Response(
+                    {'error': 'Aucun client trouvé dans la base de données', 'success': False}, 
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            logger.info(f"Client trouvé: {client.nom} {client.prenom} (ID: {client.id})")
+            
+            # Trouver la spécification par défaut du produit
+            specification = SpecificationProduit.objects.filter(
+                produit_id=produit_id, 
+                est_defaut=True
+            ).first()
+            
+            if not specification:
+                # Prendre la première spécification disponible
+                specification = SpecificationProduit.objects.filter(
+                    produit_id=produit_id
+                ).first()
+            
+            if not specification:
+                return Response(
+                    {'error': f'Aucune spécification trouvée pour le produit {produit_id}', 'success': False}, 
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            logger.info(f"Spécification trouvée: {specification.nom} (ID: {specification.id})")
+            
+            # ✅ CRÉER DIRECTEMENT L'OBJET PANIER
+            panier_existant = Panier.objects.filter(
+                client=client, 
+                specification=specification
+            ).first()
+            
+            if panier_existant:
+                # Mettre à jour la quantité existante
+                nouvelle_quantite = panier_existant.quantite + quantite
+                
+                # Vérifier le stock
+                if nouvelle_quantite > specification.quantite_stock:
+                    return Response(
+                        {
+                            'error': f'Stock insuffisant. Disponible: {specification.quantite_stock}, déjà dans panier: {panier_existant.quantite}', 
+                            'success': False
+                        }, 
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+                
+                panier_existant.quantite = nouvelle_quantite
+                panier_existant.save()
+                instance = panier_existant
+                logger.info(f"Quantité mise à jour: {instance.quantite}")
+            else:
+                # Vérifier le stock
+                if quantite > specification.quantite_stock:
+                    return Response(
+                        {
+                            'error': f'Quantité demandée ({quantite}) supérieure au stock disponible ({specification.quantite_stock})', 
+                            'success': False
+                        }, 
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+                
+                # Créer nouvel article
+                instance = Panier.objects.create(
+                    client=client,
+                    specification=specification,
+                    quantite=quantite
+                )
+                logger.info(f"Nouvel article créé: {instance.id}")
+            
+            return Response(
+                {
+                    'message': 'Produit ajouté au panier avec succès', 
+                    'success': True,
+                    'item': PanierSerializer(instance).data
+                },
+                status=status.HTTP_201_CREATED
+            )
+                
+        except Exception as e:
+            logger.error(f"Erreur ajout rapide panier: {str(e)}")
+            return Response(
+                {'error': f'Erreur lors de l\'ajout: {str(e)}', 'success': False}, 
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
         
-#         try:
-#             client = request.user.detailsclient
-#             produit = Produit.objects.get(id=produit_id)
+        
+class FavoriViewSet(viewsets.ModelViewSet):
+    """ViewSet pour la gestion des favoris"""
+    serializer_class = FavoriSerializer
+    permission_classes = [IsAuthenticated]
+    
+    def get_queryset(self):
+        try:
+            client = self.request.user.detailsclient
+            return Favori.objects.filter(client=client).select_related(
+                'produit', 'produit__categorie'
+            ).prefetch_related('produit__imageproduit_set')
+        except:
+            return Favori.objects.none()
+    
+    def perform_create(self, serializer):
+        try:
+            client = self.request.user.detailsclient
+            produit = serializer.validated_data['produit']
             
-#             favori = Favori.objects.filter(client=client, produit=produit).first()
-#             if favori:
-#                 favori.delete()
-#                 return Response({'message': 'Retiré des favoris', 'is_favori': False})
-#             else:
-#                 Favori.objects.create(client=client, produit=produit)
-#                 return Response({'message': 'Ajouté aux favoris', 'is_favori': True})
+            # Vérifier si déjà en favori
+            if Favori.objects.filter(client=client, produit=produit).exists():
+                raise serializers.ValidationError("Produit déjà dans les favoris")
+            
+            serializer.save(client=client)
+        except Exception as e:
+            raise serializers.ValidationError(str(e))
+    
+    @action(detail=False, methods=['post'])
+    def toggle(self, request):
+        """Ajouter/retirer un produit des favoris"""
+        produit_id = request.data.get('produit_id')
+        if not produit_id:
+            return Response(
+                {'error': 'produit_id requis'}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        try:
+            client = request.user.detailsclient
+            produit = Produit.objects.get(id=produit_id)
+            
+            favori = Favori.objects.filter(client=client, produit=produit).first()
+            if favori:
+                favori.delete()
+                return Response({'message': 'Retiré des favoris', 'is_favori': False})
+            else:
+                Favori.objects.create(client=client, produit=produit)
+                return Response({'message': 'Ajouté aux favoris', 'is_favori': True})
                 
-#         except Produit.DoesNotExist:
-#             return Response(
-#                 {'error': 'Produit non trouvé'}, 
-#                 status=status.HTTP_404_NOT_FOUND
-#             )
-#         except Exception as e:
-#             return Response(
-#                 {'error': str(e)}, 
-#                 status=status.HTTP_400_BAD_REQUEST
-#             )
+        except Produit.DoesNotExist:
+            return Response(
+                {'error': 'Produit non trouvé'}, 
+                status=status.HTTP_404_NOT_FOUND
+            )
+        except Exception as e:
+            return Response(
+                {'error': str(e)}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
-# class AvisViewSet(viewsets.ModelViewSet):
-#     """ViewSet pour la gestion des avis"""
-#     serializer_class = AvisSerializer
-#     permission_classes = [IsAuthenticated]
+class AvisViewSet(viewsets.ModelViewSet):
+    """ViewSet pour la gestion des avis"""
+    serializer_class = AvisSerializer
+    permission_classes = [IsAuthenticated]
     
-#     def get_queryset(self):
-#         try:
-#             client = self.request.user.detailsclient
-#             return Avis.objects.filter(client=client).select_related('produit')
-#         except:
-#             return Avis.objects.none()
+    def get_queryset(self):
+        try:
+            client = self.request.user.detailsclient
+            return Avis.objects.filter(client=client).select_related('produit')
+        except:
+            return Avis.objects.none()
     
-#     def get_serializer_class(self):
-#         if self.action in ['create', 'update', 'partial_update']:
-#             return AvisCreateSerializer
-#         return AvisSerializer
+    def get_serializer_class(self):
+        if self.action in ['create', 'update', 'partial_update']:
+            return AvisCreateSerializer
+        return AvisSerializer
     
-#     def perform_create(self, serializer):
-#         try:
-#             client = self.request.user.detailsclient
-#             produit = serializer.validated_data['produit']
+    def perform_create(self, serializer):
+        try:
+            client = self.request.user.detailsclient
+            produit = serializer.validated_data['produit']
             
-#             # Vérifier si l'utilisateur a déjà donné un avis
-#             if Avis.objects.filter(client=client, produit=produit).exists():
-#                 raise serializers.ValidationError("Vous avez déjà donné un avis pour ce produit")
+            # Vérifier si l'utilisateur a déjà donné un avis
+            if Avis.objects.filter(client=client, produit=produit).exists():
+                raise serializers.ValidationError("Vous avez déjà donné un avis pour ce produit")
             
-#             serializer.save(client=client)
-#         except Exception as e:
-#             raise serializers.ValidationError(str(e))
+            serializer.save(client=client)
+        except Exception as e:
+            raise serializers.ValidationError(str(e))
 
-# class ClientCommandeViewSet(viewsets.ModelViewSet):
-#     """ViewSet pour les commandes côté client"""
-#     serializer_class = ClientCommandeSerializer
-#     permission_classes = [IsAuthenticated]
+class ClientCommandeViewSet(viewsets.ModelViewSet):
+    """ViewSet pour les commandes côté client"""
+    serializer_class = ClientCommandeSerializer
+    permission_classes = [IsAuthenticated]
     
-#     def get_queryset(self):
-#         try:
-#             client = self.request.user.detailsclient
-#             return Commande.objects.filter(client=client).prefetch_related(
-#                 'detailcommande_set', 
-#                 'detailcommande_set__specification',
-#                 'detailcommande_set__specification__produit'
-#             ).order_by('-date_commande')
-#         except:
-#             return Commande.objects.none()
+    def get_queryset(self):
+        try:
+            client = self.request.user.detailsclient
+            return Commande.objects.filter(client=client).prefetch_related(
+                'detailcommande_set', 
+                'detailcommande_set__specification',
+                'detailcommande_set__specification__produit'
+            ).order_by('-date_commande')
+        except:
+            return Commande.objects.none()
     
-#     def get_serializer_class(self):
-#         if self.action == 'create':
-#             return CommandeCreateSerializer
-#         return ClientCommandeSerializer
+    def get_serializer_class(self):
+        if self.action == 'create':
+            return CommandeCreateSerializer
+        return ClientCommandeSerializer
     
-#     @action(detail=False, methods=['post'])
-#     def commander(self, request):
-#         """Créer une commande depuis le panier"""
-#         try:
-#             with transaction.atomic():
-#                 client = request.user.detailsclient
-#                 panier_items = Panier.objects.filter(client=client)
+    @action(detail=False, methods=['post'])
+    def commander(self, request):
+        """Créer une commande depuis le panier"""
+        try:
+            with transaction.atomic():
+                client = request.user.detailsclient
+                panier_items = Panier.objects.filter(client=client)
                 
-#                 if not panier_items.exists():
-#                     return Response(
-#                         {'error': 'Panier vide'}, 
-#                         status=status.HTTP_400_BAD_REQUEST
-#                     )
+                if not panier_items.exists():
+                    return Response(
+                        {'error': 'Panier vide'}, 
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
                 
-#                 # Calculer le montant total
-#                 montant_total = sum(
-#                     (item.specification.prix_promo or item.specification.prix) * item.quantite 
-#                     for item in panier_items
-#                 )
+                # Calculer le montant total
+                montant_total = sum(
+                    (item.specification.prix_promo or item.specification.prix) * item.quantite 
+                    for item in panier_items
+                )
                 
-#                 # Créer la commande
-#                 commande = Commande.objects.create(
-#                     client=client,
-#                     montant_total=montant_total,
-#                     statut='en_attente'
-#                 )
+                # Créer la commande
+                commande = Commande.objects.create(
+                    client=client,
+                    montant_total=montant_total,
+                    statut='en_attente'
+                )
                 
-#                 # Créer les détails de commande
-#                 for item in panier_items:
-#                     DetailCommande.objects.create(
-#                         commande=commande,
-#                         specification=item.specification,
-#                         quantite=item.quantite,
-#                         prix_unitaire=item.specification.prix_promo or item.specification.prix
-#                     )
+                # Créer les détails de commande
+                for item in panier_items:
+                    DetailCommande.objects.create(
+                        commande=commande,
+                        specification=item.specification,
+                        quantite=item.quantite,
+                        prix_unitaire=item.specification.prix_promo or item.specification.prix
+                    )
                     
-#                     # Réduire le stock
-#                     item.specification.quantite_stock -= item.quantite
-#                     item.specification.save()
+                    # Réduire le stock
+                    item.specification.quantite_stock -= item.quantite
+                    item.specification.save()
                 
-#                 # Vider le panier
-#                 panier_items.delete()
+                # Vider le panier
+                panier_items.delete()
                 
-#                 return Response(
-#                     {'message': 'Commande créée avec succès', 'commande_id': commande.id},
-#                     status=status.HTTP_201_CREATED
-#                 )
+                return Response(
+                    {'message': 'Commande créée avec succès', 'commande_id': commande.id},
+                    status=status.HTTP_201_CREATED
+                )
                 
-#         except Exception as e:
-#             logger.error(f"Erreur création commande: {str(e)}")
-#             return Response(
-#                 {'error': 'Erreur lors de la création de la commande'}, 
-#                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
-#             )
+        except Exception as e:
+            logger.error(f"Erreur création commande: {str(e)}")
+            return Response(
+                {'error': 'Erreur lors de la création de la commande'}, 
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
-# class ClientProfilViewSet(viewsets.ModelViewSet):
-#     """ViewSet pour la gestion du profil client"""
-#     serializer_class = DetailsClientSerializer
-#     permission_classes = [IsAuthenticated]
+class ClientProfilViewSet(viewsets.ModelViewSet):
+    """ViewSet pour la gestion du profil client"""
+    serializer_class = DetailsClientSerializer
+    permission_classes = [IsAuthenticated]
     
-#     def get_queryset(self):
-#         try:
-#             return DetailsClient.objects.filter(utilisateur=self.request.user)
-#         except:
-#             return DetailsClient.objects.none()
+    def get_queryset(self):
+        try:
+            return DetailsClient.objects.filter(utilisateur=self.request.user)
+        except:
+            return DetailsClient.objects.none()
     
-#     @action(detail=False, methods=['get'])
-#     def mon_profil(self, request):
-#         """Récupère le profil du client connecté"""
-#         try:
-#             profil = request.user.detailsclient
-#             serializer = self.get_serializer(profil)
-#             return Response(serializer.data)
-#         except:
-#             return Response(
-#                 {'error': 'Profil client non trouvé'}, 
-#                 status=status.HTTP_404_NOT_FOUND
-#             )
+    @action(detail=False, methods=['get'])
+    def mon_profil(self, request):
+        """Récupère le profil du client connecté"""
+        try:
+            profil = request.user.detailsclient
+            serializer = self.get_serializer(profil)
+            return Response(serializer.data)
+        except:
+            return Response(
+                {'error': 'Profil client non trouvé'}, 
+                status=status.HTTP_404_NOT_FOUND
+            )
         
 
 
