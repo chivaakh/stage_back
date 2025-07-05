@@ -17,6 +17,9 @@ import json
 import logging
 import traceback
 import requests
+from rest_framework.views import APIView
+from rest_framework.response import Response
+
 
 # Django core imports
 from django.utils import timezone
@@ -360,8 +363,26 @@ class VendeurInfoView(APIView):
 
         try:
             utilisateur = Utilisateur.objects.get(id_utilisateur=user_id)
+
+            response_data = {
+                "id": utilisateur.id_utilisateur,
+                "type_utilisateur": utilisateur.type_utilisateur,
+                "nom": utilisateur.nom,
+                "prenom": utilisateur.prenom,
+                "email": utilisateur.email,
+                "telephone": utilisateur.telephone,
+            }
+
+            return Response(response_data, status=200)
+
         except Utilisateur.DoesNotExist:
             return Response({"error": "Utilisateur non trouvé."}, status=401)
+
+
+
+
+
+
 
 class ClientProduitViewSet(viewsets.ReadOnlyModelViewSet):
     """ViewSet pour les produits côté client (lecture seule)"""
