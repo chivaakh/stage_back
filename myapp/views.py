@@ -364,6 +364,7 @@ class VendeurInfoView(APIView):
         try:
             utilisateur = Utilisateur.objects.get(id_utilisateur=user_id)
 
+            #  Informations de base de l'utilisateur
             response_data = {
                 "id": utilisateur.id_utilisateur,
                 "type_utilisateur": utilisateur.type_utilisateur,
@@ -371,7 +372,45 @@ class VendeurInfoView(APIView):
                 "prenom": utilisateur.prenom,
                 "email": utilisateur.email,
                 "telephone": utilisateur.telephone,
+                "date_creation": utilisateur.date_creation,
+                "est_verifie": utilisateur.est_verifie
             }
+
+            #  AJOUT : Récupérer les informations de la boutique si c'est un vendeur
+            if utilisateur.type_utilisateur == 'vendeur':
+                try:
+                    # Essayer via la relation
+                    profil_vendeur = utilisateur.profil_vendeur
+                    response_data["boutique"] = {
+                        "nom_boutique": profil_vendeur.nom_boutique,
+                        "description": profil_vendeur.description,
+                        "ville": profil_vendeur.ville,
+                        "adresse": profil_vendeur.adresse if hasattr(profil_vendeur, 'adresse') else None,
+                        "telephone_professionnel": profil_vendeur.telephone_professionnel if hasattr(profil_vendeur, 'telephone_professionnel') else None,
+                        "est_approuve": profil_vendeur.est_approuve,
+                        "evaluation": float(profil_vendeur.evaluation),
+                        "total_ventes": float(profil_vendeur.total_ventes),
+                        "logo": profil_vendeur.logo.url if profil_vendeur.logo else None
+                    }
+                except ProfilVendeur.DoesNotExist:
+                    # Si la relation ne fonctionne pas, chercher directement
+                    try:
+                        profil_vendeur = ProfilVendeur.objects.get(utilisateur_id=utilisateur.id_utilisateur)
+                        response_data["boutique"] = {
+                            "nom_boutique": profil_vendeur.nom_boutique,
+                            "description": profil_vendeur.description,
+                            "ville": profil_vendeur.ville,
+                            "adresse": profil_vendeur.adresse if hasattr(profil_vendeur, 'adresse') else None,
+                            "telephone_professionnel": profil_vendeur.telephone_professionnel if hasattr(profil_vendeur, 'telephone_professionnel') else None,
+                            "est_approuve": profil_vendeur.est_approuve,
+                            "evaluation": float(profil_vendeur.evaluation),
+                            "total_ventes": float(profil_vendeur.total_ventes),
+                            "logo": profil_vendeur.logo.url if profil_vendeur.logo else None
+                        }
+                    except ProfilVendeur.DoesNotExist:
+                        response_data["boutique"] = None
+            else:
+                response_data["boutique"] = None
 
             return Response(response_data, status=200)
 
