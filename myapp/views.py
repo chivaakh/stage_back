@@ -1253,15 +1253,16 @@ class DetailCommandeViewSet(viewsets.ModelViewSet):
 # ===========================
 # FONCTIONS UTILITAIRES
 # ===========================
-
 @csrf_exempt
 @api_view(['POST'])
 def upload_image(request):
-    """Upload une image et retourne son URL - VERSION FINALE"""
+    """Upload une image et retourne son URL - VERSION MOBILE COMPATIBLE"""
     try:
         print(f"🔍 Méthode: {request.method}")
         print(f"🔍 Headers: {dict(request.headers)}")
         print(f"🔍 Files: {list(request.FILES.keys())}")
+        print(f"🔍 User-Agent: {request.META.get('HTTP_USER_AGENT', 'N/A')}")
+        print(f"🔍 Remote Address: {request.META.get('REMOTE_ADDR', 'N/A')}")
         
         if 'image' not in request.FILES:
             return Response({
@@ -1303,8 +1304,26 @@ def upload_image(request):
             for chunk in image_file.chunks():
                 destination.write(chunk)
         
-        # Construire l'URL correcte
-        base_url = f"{request.scheme}://{request.get_host()}"
+        # ⭐ DÉTECTION APP MOBILE ET GÉNÉRATION URL ADAPTÉE
+        user_agent = request.META.get('HTTP_USER_AGENT', '')
+        host = request.get_host()
+        
+        # Détecter si c'est une app Flutter
+        is_flutter_app = 'Dart' in user_agent or 'Flutter' in user_agent
+        
+        print(f"📱 Flutter app détecté: {is_flutter_app}")
+        print(f"🌐 Host: {host}")
+        
+        # Générer l'URL appropriée
+        if is_flutter_app and ('localhost' in host or '127.0.0.1' in host):
+            # Pour app Flutter sur émulateur Android
+            base_url = f"{request.scheme}://10.0.2.2:8000"
+            print(f"📱 URL base mobile: {base_url}")
+        else:
+            # Pour web ou production
+            base_url = f"{request.scheme}://{host}"
+            print(f"🌐 URL base web: {base_url}")
+        
         image_url = f"{base_url}{settings.MEDIA_URL}{relative_path.replace(os.path.sep, '/')}"
         
         print(f"✅ Image sauvée: {absolute_path}")
@@ -1316,7 +1335,12 @@ def upload_image(request):
             'url': image_url,
             'filename': unique_filename,
             'path': relative_path,
-            'size': image_file.size
+            'size': image_file.size,
+            'debug_info': {
+                'is_flutter_app': is_flutter_app,
+                'host': host,
+                'user_agent': user_agent[:100]  # Premier 100 caractères
+            }
         }, status=status.HTTP_201_CREATED)
         
     except Exception as e:
@@ -1325,7 +1349,6 @@ def upload_image(request):
         return Response({
             'error': f'Erreur serveur: {str(e)}'
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
 
 # ===========================
 # FONCTIONS DE DEBUG

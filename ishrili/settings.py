@@ -79,6 +79,7 @@ CORS_ALLOWED_ORIGINS = [
     "http://192.168.100.32:8000",  # Ton adresse IP locale
 ]
 
+
 # Optionnel : si besoin de cookies, sessions cross-origin
 CORS_ALLOW_CREDENTIALS = True
 
