@@ -32,6 +32,7 @@ ALLOWED_HOSTS = [
     '192.168.100.9',   # Votre IP locale Wi-Fi
     '192.168.56.1', # Votre IP Ethernet (VirtualBox/VMware)
     '192.168.100.79',
+    '192.168.100.32',
     '10.0.2.15',     
     '10.0.2.1',        
     '0.0.0.0',
@@ -258,7 +259,14 @@ MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 
 
+
+## WEB
 SESSION_COOKIE_SAMESITE = "None"  # ← requis pour autoriser en cross-site + HTTPS
-SESSION_COOKIE_SECURE = True      # ← requis car frontend en HTTPS
+SESSION_COOKIE_SECURE = True      # ← requis car frontend en HTTPS , temporairement m commentitou
 CSRF_COOKIE_SAMESITE = "None"
-CSRF_COOKIE_SECURE = True
+CSRF_COOKIE_SECURE = True  # temporairement m comentitou 
+
+
+## MOBILE
+# SESSION_COOKIE_SECURE = False
+# CSRF_COOKIE_SECURE = False
