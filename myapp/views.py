@@ -1,25 +1,13 @@
-# myapp/views.py - VERSION FINALE COMPLÈTE ET ORGANISEE
+# myapp/views.py - VERSION CORRIGÉE ET NETTOYÉE
 
-# Python standard libraries
-from django.utils import timezone
-# Imports groupés et organisés
-# myapp/views.py - VERSION COMPLÈTE avec tous les ViewSets
-from rest_framework import viewsets, status
-from rest_framework.decorators import action
-from rest_framework.response import Response
-from django.db import transaction
-from .models import Produit, ImageProduit, SpecificationProduit, Utilisateur, PasswordResetToken, ProfilVendeur
-from .serializers import AvisCreateSerializer, AvisSerializer, ClientCategorieSerializer, ClientCommandeSerializer, CommandeCreateSerializer, FavoriSerializer, PanierSerializer, ProduitSerializer, ImageProduitSerializer, SpecificationProduitSerializer , SignupSerializer, LoginSerializer, ProfilVendeurSerializer
 import logging
 import os
 import uuid
 import json
-import logging
 import traceback
 import requests
-from rest_framework.views import APIView
-from rest_framework.response import Response
-
+from datetime import timedelta
+from rest_framework import serializers
 
 # Django core imports
 from django.utils import timezone
@@ -28,7 +16,7 @@ from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
 from django.conf import settings
 from django.db import transaction
-from django.db.models import Q, Avg, Count
+from django.db.models import Q, Avg, Count, Min, Max, Sum, Case, When, IntegerField, CharField, Value
 from django.http import JsonResponse
 from django.core.mail import send_mail
 from django.shortcuts import render
@@ -40,6 +28,7 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.decorators import action, api_view
 from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.pagination import PageNumberPagination
 from django_filters.rest_framework import DjangoFilterBackend
 
 # Google OAuth
@@ -50,39 +39,48 @@ from google.auth.transport import requests as google_requests
 from .models import (
     Utilisateur, ProfilVendeur, PasswordResetToken,
     Produit, ImageProduit, SpecificationProduit, MouvementStock,
-    Categorie, Notification, Commande, DetailCommande,
-    Panier, Favori, Avis, DetailsClient, DetailCommande, DetailsCommercant
+    Categorie, Notification, Commande, DetailCommande, TrackingCommande,
+    Panier, Favori, Avis, DetailsClient, DetailsCommercant
 )
-from .serializers import (
-    ClientProduitSerializer, 
-    ClientCategorieSerializer,
-    PanierSerializer, PanierCreateSerializer, 
-    FavoriSerializer,
-    AvisSerializer, AvisCreateSerializer, ClientCommandeSerializer,
-    CommandeCreateSerializer, 
-    DetailsClientSerializer
-)
-import logging
 
 # Local serializers
 from .serializers import (
-    SignupSerializer, LoginSerializer, ProfilVendeurSerializer,
-    ProduitSerializer, ImageProduitSerializer, SpecificationProduitSerializer,
-    MouvementStockSerializer, CategorieSerializer, NotificationSerializer,
-    CommandeSerializer, DetailCommandeSerializer, DetailsClientSerializer,
-    SignupWithDetailsSerializer
+    ProduitSerializer, CategorieSerializer, ImageProduitSerializer, 
+    SpecificationProduitSerializer, SignupSerializer, LoginSerializer,
+    PanierSerializer, PanierCreateSerializer, FavoriSerializer,
+    CommandeSerializer, DetailCommandeSerializer, TrackingCommandeSerializer,
+    NotificationSerializer, AvisSerializer, AvisCreateSerializer,
+    ProfilVendeurSerializer, ClientProduitSerializer, ClientCategorieSerializer,
+    ClientCommandeSerializer, CommandeCreateSerializer, DetailsClientSerializer,
+    MouvementStockSerializer
 )
-from myapp import serializers
 
 # Logger configuration
 logger = logging.getLogger(__name__)
 
+# ===========================
+# PAGINATION PERSONNALISÉE
+# ===========================
 
+class CustomPagination(PageNumberPagination):
+    """Pagination personnalisée"""
+    page_size = 12
+    page_size_query_param = 'page_size'
+    max_page_size = 100
+    
+    def get_paginated_response(self, data):
+        return Response({
+            'count': self.page.paginator.count,
+            'next': self.get_next_link(),
+            'previous': self.get_previous_link(),
+            'total_pages': self.page.paginator.num_pages,
+            'current_page': self.page.number,
+            'results': data
+        })
 
-
-
-
-
+# ===========================
+# VUES D'AUTHENTIFICATION
+# ===========================
 
 class SignupView(APIView):
     permission_classes = [AllowAny]
@@ -101,15 +99,11 @@ class SignupView(APIView):
             else:
                 return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
-            import traceback
             traceback_str = traceback.format_exc()
             return Response({
                 "error": str(e),
                 "trace": traceback_str
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-
-
 
 class LoginView(APIView):
     permission_classes = [AllowAny]
@@ -131,13 +125,10 @@ class LoginView(APIView):
         if not check_password(mot_de_passe, utilisateur.mot_de_passe):
             return Response({"error": "Identifiant ou mot de passe incorrect."}, status=401)
 
-        # Ne pas utiliser login() ici, faire une session manuelle
-        request.session['user_id'] = utilisateur.id_utilisateur  # stocker l'id dans la session
+        # Stocker l'id dans la session
+        request.session['user_id'] = utilisateur.id_utilisateur
 
         return Response({"message": "Connexion réussie"}, status=200)
-
-
-
 
 class RequestPasswordResetView(APIView):
     permission_classes = [AllowAny]
@@ -193,8 +184,6 @@ class RequestPasswordResetView(APIView):
             "token": str(token_obj.token)  # AJOUT : Retourner aussi le token pour debug/test
         }, status=200)
 
-
-
 class ResetPasswordView(APIView):
     permission_classes = [AllowAny]
 
@@ -215,13 +204,10 @@ class ResetPasswordView(APIView):
         utilisateur.mot_de_passe = make_password(mot_de_passe)
         utilisateur.save()
 
-        # Supprimer ou invalider le token
+        # Supprimer le token
         token_obj.delete()
 
         return Response({"message": "Mot de passe réinitialisé avec succès"}, status=200)
-
-
-
 
 class GoogleLoginView(APIView):
     permission_classes = [AllowAny]
@@ -232,7 +218,10 @@ class GoogleLoginView(APIView):
             return Response({"error": "Token requis"}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            idinfo = id_token.verify_oauth2_token(token, google_requests.Request(), "128897548037-fi6qsoqngat2rg46apt6pq6tfspbfcp3.apps.googleusercontent.com")
+            idinfo = id_token.verify_oauth2_token(
+                token, google_requests.Request(), 
+                "128897548037-fi6qsoqngat2rg46apt6pq6tfspbfcp3.apps.googleusercontent.com"
+            )
 
             email = idinfo.get("email")
             nom = idinfo.get("family_name") or ""
@@ -245,7 +234,7 @@ class GoogleLoginView(APIView):
             with transaction.atomic():
                 telephone_temporaire = f"google_{get_random_string(length=10)}"
                 utilisateur, created = Utilisateur.objects.get_or_create(
-                    email=email,  # Email sera jamais None ici car vient de Google
+                    email=email,
                     defaults={
                         "nom": nom,
                         "prenom": prenom,
@@ -267,13 +256,8 @@ class GoogleLoginView(APIView):
             }, status=status.HTTP_200_OK)
 
         except ValueError as e:
-            import traceback
-            print("Erreur Google token :", e)
-            traceback.print_exc()
+            logger.error(f"Erreur Google token: {e}")
             return Response({"error": f"Token invalide : {str(e)}"}, status=status.HTTP_400_BAD_REQUEST)
-
-
-
 
 class FacebookLoginView(APIView):
     permission_classes = [AllowAny]
@@ -296,7 +280,6 @@ class FacebookLoginView(APIView):
             return Response({"error": "Nom non trouvé dans le token"}, status=status.HTTP_400_BAD_REQUEST)
 
         with transaction.atomic():
-            # Email sera jamais None ici car requis pour Facebook
             utilisateur, created = Utilisateur.objects.get_or_create(email=email)
             utilisateur.nom = name.split(" ")[-1]
             utilisateur.prenom = " ".join(name.split(" ")[:-1])
@@ -319,7 +302,9 @@ class FacebookLoginView(APIView):
             }
         }, status=status.HTTP_200_OK)
 
-
+# ===========================
+# VUES PROFIL VENDEUR
+# ===========================
 
 class CreerProfilVendeurView(APIView):
     permission_classes = [AllowAny]
@@ -340,30 +325,24 @@ class CreerProfilVendeurView(APIView):
             return Response({"detail": "Profil vendeur introuvable."}, status=404)
 
     def post(self, request):
-        # Vérification session
         user_id = request.session.get('user_id')
         if not user_id:
             return Response({"error": "Vous devez être connecté pour créer une boutique."}, status=401)
 
         try:
-            #  Récupération utilisateur
             utilisateur = Utilisateur.objects.get(id_utilisateur=user_id)
         except Utilisateur.DoesNotExist:
             return Response({"error": "Utilisateur invalide."}, status=401)
 
-        # Vérification type vendeur
         if utilisateur.type_utilisateur != 'vendeur':
             return Response({"error": "Seuls les vendeurs peuvent créer un profil boutique."}, status=403)
 
-        # Vérification profil existant
         if hasattr(utilisateur, 'profil_vendeur'):
             return Response({"error": "Le profil vendeur existe déjà."}, status=400)
 
-        # Validation données
         serializer = ProfilVendeurSerializer(data=request.data)
         if serializer.is_valid():
             try:
-                # Création profil avec utilisateur
                 profil = serializer.save(utilisateur=utilisateur)
                 return Response(ProfilVendeurSerializer(profil).data, status=201)
             except Exception as e:
@@ -373,10 +352,6 @@ class CreerProfilVendeurView(APIView):
                 }, status=500)
         else:
             return Response(serializer.errors, status=400)
-
-
-
-# Ajoutez cette nouvelle vue dans votre views.py
 
 class VendeurInfoView(APIView):
     permission_classes = [AllowAny]
@@ -389,7 +364,6 @@ class VendeurInfoView(APIView):
         try:
             utilisateur = Utilisateur.objects.get(id_utilisateur=user_id)
 
-            #  Informations de base de l'utilisateur
             response_data = {
                 "id": utilisateur.id_utilisateur,
                 "type_utilisateur": utilisateur.type_utilisateur,
@@ -401,10 +375,8 @@ class VendeurInfoView(APIView):
                 "est_verifie": utilisateur.est_verifie
             }
 
-            #  AJOUT : Récupérer les informations de la boutique si c'est un vendeur
             if utilisateur.type_utilisateur == 'vendeur':
                 try:
-                    # Essayer via la relation
                     profil_vendeur = utilisateur.profil_vendeur
                     response_data["boutique"] = {
                         "nom_boutique": profil_vendeur.nom_boutique,
@@ -418,7 +390,6 @@ class VendeurInfoView(APIView):
                         "logo": profil_vendeur.logo.url if profil_vendeur.logo else None
                     }
                 except ProfilVendeur.DoesNotExist:
-                    # Si la relation ne fonctionne pas, chercher directement
                     try:
                         profil_vendeur = ProfilVendeur.objects.get(utilisateur_id=utilisateur.id_utilisateur)
                         response_data["boutique"] = {
@@ -442,11 +413,9 @@ class VendeurInfoView(APIView):
         except Utilisateur.DoesNotExist:
             return Response({"error": "Utilisateur non trouvé."}, status=401)
 
-
-
-
-
-
+# ===========================
+# VIEWSETS E-COMMERCE CLIENT
+# ===========================
 
 class ClientProduitViewSet(viewsets.ReadOnlyModelViewSet):
     """ViewSet pour les produits côté client (lecture seule)"""
@@ -462,7 +431,6 @@ class ClientProduitViewSet(viewsets.ReadOnlyModelViewSet):
         return Produit.objects.prefetch_related(
             'imageproduit_set', 'specificationproduit_set', 'avis_set'
         ).select_related('categorie', 'commercant').filter(
-            # Seulement les produits avec du stock
             specificationproduit__quantite_stock__gt=0
         ).distinct()
 
@@ -492,7 +460,6 @@ class ClientProduitViewSet(viewsets.ReadOnlyModelViewSet):
         if categorie_id:
             queryset = queryset.filter(categorie_id=categorie_id)
         
-        # Pagination
         page = self.paginate_queryset(queryset.distinct())
         if page is not None:
             serializer = self.get_serializer(page, many=True)
@@ -504,14 +471,7 @@ class ClientProduitViewSet(viewsets.ReadOnlyModelViewSet):
     @action(detail=False, methods=['get'])
     def nouveaute(self, request):
         """Récupère les nouveaux produits (derniers 30 jours)"""
-        from datetime import timedelta
-        date_limite = timezone.now() - timedelta(days=30)
-        
-        queryset = self.get_queryset().filter(
-            # Simuler date_creation avec l'ID (plus récent = ID plus élevé)
-            id__gte=self.get_queryset().order_by('-id').first().id - 50
-        )[:20]
-        
+        queryset = self.get_queryset().order_by('-id')[:20]
         serializer = self.get_serializer(queryset, many=True)
         return Response(serializer.data)
 
@@ -547,7 +507,6 @@ class ClientCategorieViewSet(viewsets.ReadOnlyModelViewSet):
             'imageproduit_set', 'specificationproduit_set'
         )
         
-        # Pagination
         page = self.paginate_queryset(produits)
         if page is not None:
             serializer = ClientProduitSerializer(page, many=True)
@@ -556,21 +515,14 @@ class ClientCategorieViewSet(viewsets.ReadOnlyModelViewSet):
         serializer = ClientProduitSerializer(produits, many=True)
         return Response(serializer.data)
 
-# 
-# SOLUTION TEMPORAIRE - Dans votre views.py
-
-# Option 1: TEMPORAIRE pour tester - Changer les permissions
-from rest_framework.permissions import AllowAny
-
 class PanierViewSet(viewsets.ModelViewSet):
     """ViewSet pour la gestion du panier"""
     serializer_class = PanierSerializer
-    permission_classes = [AllowAny]  # ✅ TEMPORAIRE
+    permission_classes = [AllowAny]  # TEMPORAIRE
     
     def get_queryset(self):
         """Récupérer les articles du panier du premier client disponible"""
         try:
-            # ✅ UTILISER LE PREMIER CLIENT DISPONIBLE
             client = DetailsClient.objects.first()
             if not client:
                 return Panier.objects.none()
@@ -589,7 +541,6 @@ class PanierViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         """Ajouter un produit au panier"""
         try:
-            # ✅ UTILISER LE PREMIER CLIENT DISPONIBLE
             client = DetailsClient.objects.first()
             if not client:
                 raise Exception("Aucun client trouvé dans la base de données")
@@ -597,17 +548,14 @@ class PanierViewSet(viewsets.ModelViewSet):
             specification = serializer.validated_data['specification']
             quantite = serializer.validated_data['quantite']
             
-            # Vérifier si l'article existe déjà
             panier_existant = Panier.objects.filter(
                 client=client, 
                 specification=specification
             ).first()
             
             if panier_existant:
-                # Mettre à jour la quantité existante
                 nouvelle_quantite = panier_existant.quantite + quantite
                 
-                # Vérifier le stock
                 if nouvelle_quantite > specification.quantite_stock:
                     raise Exception(
                         f"Stock insuffisant. Disponible: {specification.quantite_stock}, "
@@ -618,7 +566,6 @@ class PanierViewSet(viewsets.ModelViewSet):
                 panier_existant.save()
                 return panier_existant
             else:
-                # Créer nouvel article
                 return serializer.save(client=client)
                 
         except Exception as e:
@@ -726,7 +673,6 @@ class PanierViewSet(viewsets.ModelViewSet):
                     status=status.HTTP_400_BAD_REQUEST
                 )
             
-            # ✅ VÉRIFIER QU'UN CLIENT EXISTE
             client = DetailsClient.objects.first()
             if not client:
                 return Response(
@@ -743,7 +689,6 @@ class PanierViewSet(viewsets.ModelViewSet):
             ).first()
             
             if not specification:
-                # Prendre la première spécification disponible
                 specification = SpecificationProduit.objects.filter(
                     produit_id=produit_id
                 ).first()
@@ -756,17 +701,14 @@ class PanierViewSet(viewsets.ModelViewSet):
             
             logger.info(f"Spécification trouvée: {specification.nom} (ID: {specification.id})")
             
-            # ✅ CRÉER DIRECTEMENT L'OBJET PANIER
             panier_existant = Panier.objects.filter(
                 client=client, 
                 specification=specification
             ).first()
             
             if panier_existant:
-                # Mettre à jour la quantité existante
                 nouvelle_quantite = panier_existant.quantite + quantite
                 
-                # Vérifier le stock
                 if nouvelle_quantite > specification.quantite_stock:
                     return Response(
                         {
@@ -781,7 +723,6 @@ class PanierViewSet(viewsets.ModelViewSet):
                 instance = panier_existant
                 logger.info(f"Quantité mise à jour: {instance.quantite}")
             else:
-                # Vérifier le stock
                 if quantite > specification.quantite_stock:
                     return Response(
                         {
@@ -791,7 +732,6 @@ class PanierViewSet(viewsets.ModelViewSet):
                         status=status.HTTP_400_BAD_REQUEST
                     )
                 
-                # Créer nouvel article
                 instance = Panier.objects.create(
                     client=client,
                     specification=specification,
@@ -814,8 +754,353 @@ class PanierViewSet(viewsets.ModelViewSet):
                 {'error': f'Erreur lors de l\'ajout: {str(e)}', 'success': False}, 
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+
+# ===========================
+# VIEWSETS PRODUITS VENDEUR
+# ===========================
+
+class ProduitViewSet(viewsets.ModelViewSet):
+    serializer_class = ProduitSerializer
+    permission_classes = [AllowAny]
+    pagination_class = CustomPagination
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    
+    filterset_fields = ['categorie']
+    search_fields = ['nom', 'description', 'reference']
+    ordering_fields = ['nom', 'id']
+    ordering = ['-id']
+
+    def get_queryset(self):
+        """Optimiser les requêtes avec prefetch et annotations"""
+        queryset = Produit.objects.prefetch_related(
+            'imageproduit_set', 
+            'specificationproduit_set'
+        ).select_related('commercant', 'categorie')
         
+        stock_filter = self.request.query_params.get('stock_filter', None)
+        if stock_filter:
+            if stock_filter == 'in_stock':
+                queryset = queryset.filter(specificationproduit__quantite_stock__gt=5)
+            elif stock_filter == 'low_stock':
+                queryset = queryset.filter(
+                    specificationproduit__quantite_stock__lte=5,
+                    specificationproduit__quantite_stock__gt=0
+                )
+            elif stock_filter == 'out_of_stock':
+                queryset = queryset.filter(
+                    Q(specificationproduit__quantite_stock=0) |
+                    Q(specificationproduit__isnull=True)
+                )
         
+        return queryset.distinct()
+
+    def create(self, request, *args, **kwargs):
+        """Créer un produit avec images et spécifications"""
+        logger.info(f"🔍 Données reçues pour création: {request.data}")
+        
+        try:
+            with transaction.atomic():
+                produit_data = {
+                    'nom': request.data.get('nom'),
+                    'description': request.data.get('description'),
+                    'reference': request.data.get('reference'),
+                }
+                
+                if request.data.get('categorie'):
+                    produit_data['categorie_id'] = request.data.get('categorie')
+                
+                images_data = request.data.get('images', [])
+                specifications_data = request.data.get('specifications', [])
+                
+                logger.info(f"📦 Produit: {produit_data}")
+                logger.info(f"🖼️ Images reçues: {len(images_data)} images")
+                logger.info(f"📋 Spécifications: {len(specifications_data)} specs")
+                
+                produit_serializer = ProduitSerializer(data=produit_data)
+                if produit_serializer.is_valid():
+                    produit = produit_serializer.save()
+                    logger.info(f"✅ Produit créé avec ID: {produit.id}")
+                    
+                    # Ajouter les images
+                    images_creees = 0
+                    for i, image_data in enumerate(images_data):
+                        if image_data.get('url_image'):
+                            try:
+                                image_obj = ImageProduit.objects.create(
+                                    produit=produit,
+                                    url_image=image_data['url_image'],
+                                    est_principale=image_data.get('est_principale', False),
+                                    ordre=image_data.get('ordre', i)
+                                )
+                                images_creees += 1
+                                logger.info(f"✅ Image {i+1} créée: ID={image_obj.id}")
+                            except Exception as e:
+                                logger.error(f"❌ Erreur création image {i+1}: {str(e)}")
+                    
+                    logger.info(f"📸 Total images créées: {images_creees}")
+                    
+                    # Ajouter les spécifications
+                    specs_creees = 0
+                    for spec_data in specifications_data:
+                        if spec_data.get('nom') and spec_data.get('prix'):
+                            try:
+                                spec_obj = SpecificationProduit.objects.create(
+                                    produit=produit,
+                                    nom=spec_data['nom'],
+                                    description=spec_data.get('description', ''),
+                                    prix=float(spec_data['prix']),
+                                    prix_promo=float(spec_data['prix_promo']) if spec_data.get('prix_promo') else None,
+                                    quantite_stock=int(spec_data.get('quantite_stock', 0)),
+                                    est_defaut=spec_data.get('est_defaut', False),
+                                    reference_specification=spec_data.get('reference_specification', '')
+                                )
+                                specs_creees += 1
+                                logger.info(f"✅ Spécification créée: {spec_obj.nom}")
+                            except Exception as e:
+                                logger.error(f"❌ Erreur création spécification: {str(e)}")
+                    
+                    logger.info(f"📋 Total spécifications créées: {specs_creees}")
+                    
+                    produit_complet = self.get_queryset().get(id=produit.id)
+                    response_data = ProduitSerializer(produit_complet).data
+                    logger.info(f"📤 Réponse API finale: {response_data}")
+                    
+                    return Response(response_data, status=status.HTTP_201_CREATED)
+                else:
+                    logger.error(f"❌ Erreurs validation produit: {produit_serializer.errors}")
+                    return Response(produit_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+                    
+        except Exception as e:
+            logger.error(f"❌ Erreur lors de la création complète: {str(e)}")
+            logger.error(f"❌ Traceback: {traceback.format_exc()}")
+            return Response(
+                {'error': f'Erreur serveur: {str(e)}'}, 
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+    def update(self, request, *args, **kwargs):
+        """Mettre à jour un produit avec toutes ses relations"""
+        partial = kwargs.pop('partial', False)
+        instance = self.get_object()
+        
+        try:
+            with transaction.atomic():
+                produit_data = {
+                    'nom': request.data.get('nom', instance.nom),
+                    'description': request.data.get('description', instance.description),
+                    'reference': request.data.get('reference', instance.reference),
+                }
+                
+                if 'categorie' in request.data:
+                    produit_data['categorie_id'] = request.data.get('categorie')
+                
+                serializer = self.get_serializer(instance, data=produit_data, partial=partial)
+                serializer.is_valid(raise_exception=True)
+                produit = serializer.save()
+                
+                # Mettre à jour les images si fournies
+                if 'images' in request.data:
+                    instance.imageproduit_set.all().delete()
+                    
+                    for i, image_data in enumerate(request.data.get('images', [])):
+                        if image_data.get('url_image'):
+                            ImageProduit.objects.create(
+                                produit=produit,
+                                url_image=image_data['url_image'],
+                                est_principale=image_data.get('est_principale', False),
+                                ordre=image_data.get('ordre', i)
+                            )
+                
+                # Mettre à jour les spécifications si fournies
+                if 'specifications' in request.data:
+                    instance.specificationproduit_set.all().delete()
+                    
+                    for spec_data in request.data.get('specifications', []):
+                        if spec_data.get('nom') and spec_data.get('prix'):
+                            SpecificationProduit.objects.create(
+                                produit=produit,
+                                nom=spec_data['nom'],
+                                description=spec_data.get('description', ''),
+                                prix=float(spec_data['prix']),
+                                prix_promo=float(spec_data['prix_promo']) if spec_data.get('prix_promo') else None,
+                                quantite_stock=int(spec_data.get('quantite_stock', 0)),
+                                est_defaut=spec_data.get('est_defaut', False),
+                                reference_specification=spec_data.get('reference_specification', '')
+                            )
+                
+                produit_complet = self.get_queryset().get(id=produit.id)
+                response_data = ProduitSerializer(produit_complet).data
+                
+                return Response(response_data)
+                
+        except Exception as e:
+            logger.error(f"❌ Erreur lors de la mise à jour: {str(e)}")
+            return Response(
+                {'error': f'Erreur serveur: {str(e)}'}, 
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+    @action(detail=False, methods=['get'])
+    def stats(self, request):
+        """Statistiques des produits"""
+        queryset = self.get_queryset()
+        
+        stats = {
+            'total': queryset.count(),
+            'en_stock': queryset.filter(specificationproduit__quantite_stock__gt=5).distinct().count(),
+            'stock_faible': queryset.filter(
+                specificationproduit__quantite_stock__lte=5,
+                specificationproduit__quantite_stock__gt=0
+            ).distinct().count(),
+            'rupture': queryset.filter(
+                Q(specificationproduit__quantite_stock=0) |
+                Q(specificationproduit__isnull=True)
+            ).distinct().count(),
+            'avec_images': queryset.filter(imageproduit__isnull=False).distinct().count()
+        }
+        
+        return Response(stats)
+
+    def perform_create(self, serializer):
+        # Temporaire : associer au premier commerçant trouvé
+        try:
+            from .models import DetailsCommercant
+            commercant = DetailsCommercant.objects.first()
+            if commercant:
+                serializer.save(commercant=commercant)
+            else:
+                serializer.save()
+        except:
+            serializer.save()
+
+# ===========================
+# AUTRES VIEWSETS
+# ===========================
+
+class CategorieViewSet(viewsets.ModelViewSet):
+    queryset = Categorie.objects.all().order_by('nom')
+    serializer_class = CategorieSerializer
+    permission_classes = [AllowAny]
+    pagination_class = None
+    
+    def get_queryset(self):
+        include_empty = self.request.query_params.get('include_empty', 'true')
+        queryset = Categorie.objects.all()
+        
+        if include_empty.lower() == 'false':
+            queryset = queryset.filter(produit__isnull=False).distinct()
+        
+        return queryset.order_by('nom')
+
+class ImageProduitViewSet(viewsets.ModelViewSet):
+    queryset = ImageProduit.objects.all()
+    serializer_class = ImageProduitSerializer
+    permission_classes = [AllowAny]
+
+    def get_queryset(self):
+        return ImageProduit.objects.select_related('produit').order_by('produit', 'ordre')
+
+class SpecificationProduitViewSet(viewsets.ModelViewSet):
+    queryset = SpecificationProduit.objects.all()
+    serializer_class = SpecificationProduitSerializer
+    permission_classes = [AllowAny]
+
+    def get_queryset(self):
+        return SpecificationProduit.objects.select_related('produit').order_by('produit', '-est_defaut')
+
+class MouvementStockViewSet(viewsets.ModelViewSet):
+    queryset = MouvementStock.objects.all()
+    serializer_class = MouvementStockSerializer
+    permission_classes = [AllowAny]
+
+    def perform_create(self, serializer):
+        mouvement = serializer.save()
+        spec = mouvement.specification
+        if mouvement.type_mouvement == 'entree':
+            spec.quantite_stock += mouvement.quantite
+        elif mouvement.type_mouvement == 'sortie':
+            if spec.quantite_stock < mouvement.quantite:
+                raise serializers.ValidationError("Stock insuffisant pour ce mouvement de sortie")
+            spec.quantite_stock -= mouvement.quantite
+        spec.save()
+
+class NotificationViewSet(viewsets.ModelViewSet):
+    queryset = Notification.objects.all().order_by('-date_notification')
+    serializer_class = NotificationSerializer
+    permission_classes = [AllowAny]
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        est_lue = self.request.query_params.get('est_lue')
+        if est_lue is not None:
+            if est_lue.lower() in ['true', '1']:
+                queryset = queryset.filter(est_lue=True)
+            elif est_lue.lower() in ['false', '0']:
+                queryset = queryset.filter(est_lue=False)
+        return queryset
+
+class CommandeViewSet(viewsets.ModelViewSet):
+    queryset = Commande.objects.all().order_by('-date_commande')
+    serializer_class = CommandeSerializer
+    permission_classes = [AllowAny]
+    
+    @action(detail=False, methods=['get'])
+    def commandes_du_jour(self, request):
+        """Récupère les commandes du jour actuel"""
+        today = timezone.now().date()
+        commandes = Commande.objects.filter(
+            date_commande__date=today
+        ).order_by('-date_commande')
+        
+        serializer = self.get_serializer(commandes, many=True)
+        return Response({
+            'results': serializer.data,
+            'count': commandes.count(),
+            'date': today.strftime('%Y-%m-%d')
+        })
+    
+    @action(detail=True, methods=['get'])
+    def tracking(self, request, pk=None):
+        """Récupère l'historique de tracking d'une commande"""
+        try:
+            commande = self.get_object()
+            
+            tracking_entries = TrackingCommande.objects.filter(
+                commande=commande
+            ).order_by('-date_modification')
+            
+            if not tracking_entries.exists():
+                TrackingCommande.objects.create(
+                    commande=commande,
+                    ancien_statut=None,
+                    nouveau_statut=commande.statut
+                )
+                tracking_entries = TrackingCommande.objects.filter(
+                    commande=commande
+                ).order_by('-date_modification')
+            
+            tracking_data = []
+            for entry in tracking_entries:
+                tracking_data.append({
+                    'ancien_statut': entry.ancien_statut,
+                    'nouveau_statut': entry.nouveau_statut,
+                    'date_modification': entry.date_modification.isoformat(),
+                })
+            
+            return Response(tracking_data, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            logger.error(f"Erreur tracking commande {pk}: {str(e)}")
+            return Response(
+                {'error': f'Erreur lors de la récupération du tracking: {str(e)}'}, 
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+class DetailCommandeViewSet(viewsets.ModelViewSet):
+    queryset = DetailCommande.objects.all()
+    serializer_class = DetailCommandeSerializer
+    permission_classes = [AllowAny]
+
 class FavoriViewSet(viewsets.ModelViewSet):
     """ViewSet pour la gestion des favoris"""
     serializer_class = FavoriSerializer
@@ -835,7 +1120,6 @@ class FavoriViewSet(viewsets.ModelViewSet):
             client = self.request.user.detailsclient
             produit = serializer.validated_data['produit']
             
-            # Vérifier si déjà en favori
             if Favori.objects.filter(client=client, produit=produit).exists():
                 raise serializers.ValidationError("Produit déjà dans les favoris")
             
@@ -898,7 +1182,6 @@ class AvisViewSet(viewsets.ModelViewSet):
             client = self.request.user.detailsclient
             produit = serializer.validated_data['produit']
             
-            # Vérifier si l'utilisateur a déjà donné un avis
             if Avis.objects.filter(client=client, produit=produit).exists():
                 raise serializers.ValidationError("Vous avez déjà donné un avis pour ce produit")
             
@@ -941,20 +1224,17 @@ class ClientCommandeViewSet(viewsets.ModelViewSet):
                         status=status.HTTP_400_BAD_REQUEST
                     )
                 
-                # Calculer le montant total
                 montant_total = sum(
                     (item.specification.prix_promo or item.specification.prix) * item.quantite 
                     for item in panier_items
                 )
                 
-                # Créer la commande
                 commande = Commande.objects.create(
                     client=client,
                     montant_total=montant_total,
                     statut='en_attente'
                 )
                 
-                # Créer les détails de commande
                 for item in panier_items:
                     DetailCommande.objects.create(
                         commande=commande,
@@ -963,11 +1243,9 @@ class ClientCommandeViewSet(viewsets.ModelViewSet):
                         prix_unitaire=item.specification.prix_promo or item.specification.prix
                     )
                     
-                    # Réduire le stock
                     item.specification.quantite_stock -= item.quantite
                     item.specification.save()
                 
-                # Vider le panier
                 panier_items.delete()
                 
                 return Response(
@@ -1005,314 +1283,6 @@ class ClientProfilViewSet(viewsets.ModelViewSet):
                 {'error': 'Profil client non trouvé'}, 
                 status=status.HTTP_404_NOT_FOUND
             )
-        
-
-
-class ProduitViewSet(viewsets.ModelViewSet):
-    queryset = Produit.objects.all()
-    serializer_class = ProduitSerializer
-    permission_classes = [AllowAny]
-
-    def get_queryset(self):
-        """Optimiser les requêtes avec prefetch"""
-        return Produit.objects.prefetch_related(
-            'imageproduit_set', 'specificationproduit_set'
-        ).select_related('commercant', 'categorie')
-
-    def create(self, request, *args, **kwargs):
-        """Créer un produit avec images et spécifications - VERSION FINALE"""
-        logger.info(f"🔍 Données reçues pour création: {request.data}")
-        
-        try:
-            with transaction.atomic():
-                # 1. Extraire les données avec CATEGORIE
-                produit_data = {
-                    'nom': request.data.get('nom'),
-                    'description': request.data.get('description'),
-                    'reference': request.data.get('reference'),
-                }
-                
-                # ✅ AJOUTER la catégorie si fournie
-                if request.data.get('categorie'):
-                    produit_data['categorie'] = request.data.get('categorie')
-                
-                images_data = request.data.get('images', [])
-                specifications_data = request.data.get('specifications', [])
-                
-                logger.info(f"📦 Produit: {produit_data}")
-                logger.info(f"🖼️ Images reçues: {len(images_data)} images")
-                logger.info(f"📋 Spécifications: {len(specifications_data)} specs")
-                
-                # DEBUG: Afficher le détail des images
-                for i, img_data in enumerate(images_data):
-                    logger.info(f"🖼️ Image {i+1}: {img_data}")
-                
-                # 2. Créer le produit de base
-                produit_serializer = ProduitSerializer(data=produit_data)
-                if produit_serializer.is_valid():
-                    produit = produit_serializer.save()
-                    logger.info(f"✅ Produit créé avec ID: {produit.id}")
-                    
-                    # 3. Ajouter les images
-                    images_creees = 0
-                    for i, image_data in enumerate(images_data):
-                        if image_data.get('url_image'):  # Vérifier que l'URL existe
-                            try:
-                                image_obj = ImageProduit.objects.create(
-                                    produit=produit,
-                                    url_image=image_data['url_image'],
-                                    est_principale=image_data.get('est_principale', False),
-                                    ordre=image_data.get('ordre', i)
-                                )
-                                images_creees += 1
-                                logger.info(f"✅ Image {i+1} créée: ID={image_obj.id}, URL={image_obj.url_image}")
-                            except Exception as e:
-                                logger.error(f"❌ Erreur création image {i+1}: {str(e)}")
-                    
-                    logger.info(f"📸 Total images créées: {images_creees}")
-                    
-                    # 4. Ajouter les spécifications
-                    specs_creees = 0
-                    for spec_data in specifications_data:
-                        if spec_data.get('nom') and spec_data.get('prix'):  # Vérifier données minimales
-                            try:
-                                spec_obj = SpecificationProduit.objects.create(
-                                    produit=produit,
-                                    nom=spec_data['nom'],
-                                    description=spec_data.get('description', ''),
-                                    prix=float(spec_data['prix']),
-                                    prix_promo=float(spec_data['prix_promo']) if spec_data.get('prix_promo') else None,
-                                    quantite_stock=int(spec_data.get('quantite_stock', 0)),
-                                    est_defaut=spec_data.get('est_defaut', False),
-                                    reference_specification=spec_data.get('reference_specification', '')
-                                )
-                                specs_creees += 1
-                                logger.info(f"✅ Spécification créée: {spec_obj.nom}")
-                            except Exception as e:
-                                logger.error(f"❌ Erreur création spécification: {str(e)}")
-                    
-                    logger.info(f"📋 Total spécifications créées: {specs_creees}")
-                    
-                    # 5. Retourner le produit complet avec relations
-                    produit_complet = self.get_queryset().get(id=produit.id)
-                    
-                    # DEBUG: Vérifier que les images sont bien liées
-                    images_liees = produit_complet.imageproduit_set.all()
-                    logger.info(f"🔍 Vérification: {len(images_liees)} images liées au produit")
-                    for img in images_liees:
-                        logger.info(f"🔍 Image liée: ID={img.id}, URL={img.url_image}")
-                    
-                    response_data = ProduitSerializer(produit_complet).data
-                    logger.info(f"📤 Réponse API finale: {response_data}")
-                    
-                    return Response(response_data, status=status.HTTP_201_CREATED)
-                else:
-                    logger.error(f"❌ Erreurs validation produit: {produit_serializer.errors}")
-                    return Response(produit_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-                    
-        except Exception as e:
-            logger.error(f"❌ Erreur lors de la création complète: {str(e)}")
-            logger.error(f"❌ Traceback: {traceback.format_exc()}")
-            return Response(
-                {'error': f'Erreur serveur: {str(e)}'}, 
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
-
-    @action(detail=True, methods=['post'])
-    def add_image(self, request, pk=None):
-        """Ajouter une image à un produit existant"""
-        produit = self.get_object()
-        
-        data = request.data.copy()
-        data['produit'] = produit.id
-        
-        serializer = ImageProduitSerializer(data=data)
-        if serializer.is_valid():
-            # Si c'est marqué comme principale, retirer le flag des autres
-            if data.get('est_principale', False):
-                ImageProduit.objects.filter(produit=produit, est_principale=True).update(est_principale=False)
-            
-            serializer.save()
-            return Response(serializer.data, status=status.HTTP_201_CREATED)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-    @action(detail=True, methods=['post'])
-    def add_specification(self, request, pk=None):
-        """Ajouter une spécification à un produit existant"""
-        produit = self.get_object()
-        
-        data = request.data.copy()
-        data['produit'] = produit.id
-        
-        serializer = SpecificationProduitSerializer(data=data)
-        if serializer.is_valid():
-            # Si c'est marqué comme défaut, retirer le flag des autres
-            if data.get('est_defaut', False):
-                SpecificationProduit.objects.filter(produit=produit, est_defaut=True).update(est_defaut=False)
-            
-            serializer.save()
-            return Response(serializer.data, status=status.HTTP_201_CREATED)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-    @action(detail=True, methods=['get'])
-    def images(self, request, pk=None):
-        """Récupérer toutes les images d'un produit"""
-        produit = self.get_object()
-        images = produit.imageproduit_set.all().order_by('ordre', '-est_principale')
-        serializer = ImageProduitSerializer(images, many=True)
-        return Response(serializer.data)
-
-    @action(detail=True, methods=['get'])
-    def specifications(self, request, pk=None):
-        """Récupérer toutes les spécifications d'un produit"""
-        produit = self.get_object()
-        specs = produit.specificationproduit_set.all().order_by('-est_defaut')
-        serializer = SpecificationProduitSerializer(specs, many=True)
-        return Response(serializer.data)
-
-    def perform_create(self, serializer):
-        # Temporaire : associer au premier commerçant trouvé
-        from .models import DetailsCommercant
-        commercant = DetailsCommercant.objects.first()
-        if commercant:
-            serializer.save(commercant=commercant)
-        else:
-            serializer.save()
-
-
-class ImageProduitViewSet(viewsets.ModelViewSet):
-    queryset = ImageProduit.objects.all()
-    serializer_class = ImageProduitSerializer
-    permission_classes = [AllowAny]
-
-    def get_queryset(self):
-        return ImageProduit.objects.select_related('produit').order_by('produit', 'ordre')
-
-
-class SpecificationProduitViewSet(viewsets.ModelViewSet):
-    queryset = SpecificationProduit.objects.all()
-    serializer_class = SpecificationProduitSerializer
-    permission_classes = [AllowAny]
-
-    def get_queryset(self):
-        return SpecificationProduit.objects.select_related('produit').order_by('produit', '-est_defaut')
-
-
-class MouvementStockViewSet(viewsets.ModelViewSet):
-    queryset = MouvementStock.objects.all()
-    serializer_class = MouvementStockSerializer
-    permission_classes = [AllowAny]
-
-    def perform_create(self, serializer):
-        mouvement = serializer.save()
-        spec = mouvement.specification
-        if mouvement.type_mouvement == 'entree':
-            spec.quantite_stock += mouvement.quantite
-        elif mouvement.type_mouvement == 'sortie':
-            if spec.quantite_stock < mouvement.quantite:
-                raise serializers.ValidationError("Stock insuffisant pour ce mouvement de sortie")
-            spec.quantite_stock -= mouvement.quantite
-        spec.save()
-
-
-class CategorieViewSet(viewsets.ModelViewSet):
-    queryset = Categorie.objects.all()
-    serializer_class = CategorieSerializer
-    permission_classes = [AllowAny]
-
-
-class NotificationViewSet(viewsets.ModelViewSet):
-    queryset = Notification.objects.all().order_by('-date_notification')
-    serializer_class = NotificationSerializer
-    permission_classes = [AllowAny]
-
-    def get_queryset(self):
-        queryset = super().get_queryset()
-        # Filtrage possible par query params (ex: ?est_lue=true)
-        est_lue = self.request.query_params.get('est_lue')
-        if est_lue is not None:
-            if est_lue.lower() in ['true', '1']:
-                queryset = queryset.filter(est_lue=True)
-            elif est_lue.lower() in ['false', '0']:
-                queryset = queryset.filter(est_lue=False)
-        return queryset
-    
-
-from .models import Commande, DetailCommande, TrackingCommande
-from .serializers import CommandeSerializer, DetailCommandeSerializer
-
-class CommandeViewSet(viewsets.ModelViewSet):
-    queryset = Commande.objects.all().order_by('-date_commande')
-    serializer_class = CommandeSerializer
-    permission_classes = [AllowAny]
-    
-    @action(detail=False, methods=['get'])
-    def commandes_du_jour(self, request):
-        """Récupère les commandes du jour actuel"""
-        today = timezone.now().date()
-        commandes = Commande.objects.filter(
-            date_commande__date=today
-        ).order_by('-date_commande')
-        
-        serializer = self.get_serializer(commandes, many=True)
-        return Response({
-            'results': serializer.data,
-            'count': commandes.count(),
-            'date': today.strftime('%Y-%m-%d')
-        })
-    
-    @action(detail=True, methods=['get'])
-    def tracking(self, request, pk=None):
-        """
-        ✅ CORRECTION : Récupère l'historique de tracking d'une commande
-        URL: /api/commandes/{id}/tracking/
-        """
-        try:
-            commande = self.get_object()
-            
-            # Récupérer l'historique de tracking
-            tracking_entries = TrackingCommande.objects.filter(
-                commande=commande
-            ).order_by('-date_modification')
-            
-            # Si aucun historique n'existe, créer une entrée basique
-            if not tracking_entries.exists():
-                TrackingCommande.objects.create(
-                    commande=commande,
-                    ancien_statut=None,
-                    nouveau_statut=commande.statut
-                )
-                # Récupérer à nouveau après création
-                tracking_entries = TrackingCommande.objects.filter(
-                    commande=commande
-                ).order_by('-date_modification')
-            
-            # Sérialiser les données
-            tracking_data = []
-            for entry in tracking_entries:
-                tracking_data.append({
-                    'ancien_statut': entry.ancien_statut,
-                    'nouveau_statut': entry.nouveau_statut,
-                    'date_modification': entry.date_modification.isoformat(),
-                })
-            
-            return Response(tracking_data, status=status.HTTP_200_OK)
-            
-        except Exception as e:
-            # Log de l'erreur pour debug
-            import logging
-            logger = logging.getLogger(__name__)
-            logger.error(f"Erreur tracking commande {pk}: {str(e)}")
-            
-            return Response(
-                {'error': f'Erreur lors de la récupération du tracking: {str(e)}'}, 
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
-class DetailCommandeViewSet(viewsets.ModelViewSet):
-    queryset = DetailCommande.objects.all()
-    serializer_class = DetailCommandeSerializer
-    permission_classes = [AllowAny]
-
 
 # ===========================
 # FONCTIONS UTILITAIRES
@@ -1321,11 +1291,13 @@ class DetailCommandeViewSet(viewsets.ModelViewSet):
 @csrf_exempt
 @api_view(['POST'])
 def upload_image(request):
-    """Upload une image et retourne son URL - VERSION FINALE"""
+    """Upload une image et retourne son URL - VERSION MOBILE COMPATIBLE"""
     try:
         print(f"🔍 Méthode: {request.method}")
         print(f"🔍 Headers: {dict(request.headers)}")
         print(f"🔍 Files: {list(request.FILES.keys())}")
+        print(f"🔍 User-Agent: {request.META.get('HTTP_USER_AGENT', 'N/A')}")
+        print(f"🔍 Remote Address: {request.META.get('REMOTE_ADDR', 'N/A')}")
         
         if 'image' not in request.FILES:
             return Response({
@@ -1335,40 +1307,45 @@ def upload_image(request):
         image_file = request.FILES['image']
         print(f"📸 Fichier reçu: {image_file.name}, Taille: {image_file.size}")
         
-        # Validation du fichier
         if not image_file.content_type.startswith('image/'):
             return Response({
                 'error': 'Le fichier doit être une image'
             }, status=status.HTTP_400_BAD_REQUEST)
         
-        # Taille max 5MB
         if image_file.size > 5 * 1024 * 1024:
             return Response({
                 'error': 'Fichier trop volumineux (max 5MB)'
             }, status=status.HTTP_400_BAD_REQUEST)
         
-        # Générer un nom unique
         extension = image_file.name.split('.')[-1].lower()
         unique_filename = f"{uuid.uuid4()}.{extension}"
         
-        # Créer le dossier uploads s'il n'existe pas
         upload_dir = os.path.join(settings.MEDIA_ROOT, 'uploads', 'images')
         os.makedirs(upload_dir, exist_ok=True)
         print(f"📁 Dossier upload: {upload_dir}")
         
-        # Chemin relatif pour BDD
         relative_path = os.path.join('uploads', 'images', unique_filename)
-        
-        # Chemin absolu pour sauvegarder
         absolute_path = os.path.join(settings.MEDIA_ROOT, relative_path)
         
-        # Sauvegarder le fichier
         with open(absolute_path, 'wb+') as destination:
             for chunk in image_file.chunks():
                 destination.write(chunk)
         
-        # Construire l'URL correcte
-        base_url = f"{request.scheme}://{request.get_host()}"
+        user_agent = request.META.get('HTTP_USER_AGENT', '')
+        host = request.get_host()
+        
+        is_flutter_app = 'Dart' in user_agent or 'Flutter' in user_agent
+        
+        print(f"📱 Flutter app détecté: {is_flutter_app}")
+        print(f"🌐 Host: {host}")
+        
+        if is_flutter_app and ('localhost' in host or '127.0.0.1' in host):
+            base_url = f"{request.scheme}://10.0.2.2:8000"
+            print(f"📱 URL base mobile: {base_url}")
+        else:
+            base_url = f"{request.scheme}://{host}"
+            print(f"🌐 URL base web: {base_url}")
+        
         image_url = f"{base_url}{settings.MEDIA_URL}{relative_path.replace(os.path.sep, '/')}"
         
         print(f"✅ Image sauvée: {absolute_path}")
@@ -1380,7 +1357,12 @@ def upload_image(request):
             'url': image_url,
             'filename': unique_filename,
             'path': relative_path,
-            'size': image_file.size
+            'size': image_file.size,
+            'debug_info': {
+                'is_flutter_app': is_flutter_app,
+                'host': host,
+                'user_agent': user_agent[:100]
+            }
         }, status=status.HTTP_201_CREATED)
         
     except Exception as e:
@@ -1389,7 +1371,6 @@ def upload_image(request):
         return Response({
             'error': f'Erreur serveur: {str(e)}'
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
 
 # ===========================
 # FONCTIONS DE DEBUG
@@ -1427,21 +1408,17 @@ def debug_products(request):
     except Exception as e:
         return JsonResponse({'error': str(e)})
 
-
 @csrf_exempt
 def debug_images_complete(request):
     """Diagnostic complet des images et produits"""
     try:
-        # 1. Info générale
         total_products = Produit.objects.count()
         total_images = ImageProduit.objects.count()
         
-        # 2. Produits détaillés
         products_detail = []
         for product in Produit.objects.all().order_by('-id'):
             images = product.imageproduit_set.all()
             
-            # Info produit
             product_info = {
                 'id': product.id,
                 'nom': product.nom,
@@ -1451,19 +1428,13 @@ def debug_images_complete(request):
                 'images_detail': []
             }
             
-            # Détail des images
             for img in images:
-                # Vérifier si le fichier existe physiquement
                 if img.url_image:
-                    # Extraire le chemin relatif de l'URL
                     if img.url_image.startswith('http'):
-                        # URL complète: http://10.0.2.2:8000/media/uploads/images/abc.jpg
                         relative_path = img.url_image.split('/media/')[-1] if '/media/' in img.url_image else None
                     else:
-                        # Chemin relatif: uploads/images/abc.jpg
                         relative_path = img.url_image
                     
-                    # Chemin absolu sur le serveur
                     absolute_path = os.path.join(settings.MEDIA_ROOT, relative_path) if relative_path else None
                     file_exists = os.path.exists(absolute_path) if absolute_path else False
                 else:
@@ -1485,7 +1456,6 @@ def debug_images_complete(request):
             
             products_detail.append(product_info)
         
-        # 3. Vérifier le dossier uploads
         upload_dir = os.path.join(settings.MEDIA_ROOT, 'uploads', 'images')
         upload_dir_exists = os.path.exists(upload_dir)
         
@@ -1496,10 +1466,9 @@ def debug_images_complete(request):
             except:
                 files_in_upload = ['Erreur lecture dossier']
         
-        # 4. Test API produits
         api_products = []
         try:
-            for product in Produit.objects.all()[:3]:  # Test sur 3 produits max
+            for product in Produit.objects.all()[:3]:
                 serialized = ProduitSerializer(product)
                 api_products.append(serialized.data)
         except Exception as e:
@@ -1516,7 +1485,7 @@ def debug_images_complete(request):
             'upload_directory': {
                 'path': upload_dir,
                 'exists': upload_dir_exists,
-                'files': files_in_upload[:10],  # Max 10 fichiers
+                'files': files_in_upload[:10],
             },
             'api_test': api_products,
             'settings': {

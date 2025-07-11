@@ -52,9 +52,13 @@ INSTALLED_APPS = [
     'rest_framework',           # Django REST Framework
     'rest_framework.authtoken', # Authentification par token
     'corsheaders',              # Gestion CORS pour Flutter
+    'django_filters',
     'drf_yasg',
     
 ]
+
+
+
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
@@ -79,6 +83,7 @@ CORS_ALLOWED_ORIGINS = [
     "http://192.168.100.79:8000",     # Si vous utilisez VirtualBox/VMware
     "http://192.168.100.32:8000",  # Ton adresse IP locale
 ]
+
 
 # Optionnel : si besoin de cookies, sessions cross-origin
 CORS_ALLOW_CREDENTIALS = True
@@ -227,22 +232,59 @@ DEFAULT_FROM_EMAIL = 'no-reply@Ishrili.com'
 
 
 # Configuration pour les logs (utile pour débugger les appels API)
+# LOGGING = {
+#     'version': 1,
+#     'disable_existing_loggers': False,
+#     'handlers': {
+#         'console': {
+#             'class': 'logging.StreamHandler',
+#         },
+#     },
+#     'loggers': {
+#         'django': {
+#             'handlers': ['console'],
+#             'level': 'INFO',
+#         },
+#     },
+# }
+
+
 LOGGING = {
     'version': 1,
     'disable_existing_loggers': False,
+    'formatters': {
+        'verbose': {
+            'format': '{levelname} {asctime} {module} {process:d} {thread:d} {message}',
+            'style': '{',
+        },
+        'simple': {
+            'format': '{levelname} {message}',
+            'style': '{',
+        },
+    },
     'handlers': {
         'console': {
             'class': 'logging.StreamHandler',
+            'formatter': 'simple'
+        },
+        'file': {
+            'class': 'logging.FileHandler',
+            'filename': 'debug.log',
+            'formatter': 'verbose',
         },
     },
+    'root': {
+        'handlers': ['console'],
+        'level': 'INFO',
+    },
     'loggers': {
-        'django': {
-            'handlers': ['console'],
-            'level': 'INFO',
+        'myapp': {  # Remplacez par le nom de votre app
+            'handlers': ['console', 'file'],
+            'level': 'DEBUG',
+            'propagate': False,
         },
     },
 }
-
 # Configuration Swagger/OpenAPI (pour documenter votre API)
 SWAGGER_SETTINGS = {
     'SECURITY_DEFINITIONS': {
