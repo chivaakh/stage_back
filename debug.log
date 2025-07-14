@@ -1,15 +1,15 @@
-INFO 2025-07-09 00:02:07,541 views 10848 12192 Tentative ajout produit 34, quantité 1
-INFO 2025-07-09 00:03:50,143 views 10848 12192 Tentative ajout produit 34, quantité 1
-INFO 2025-07-09 00:05:35,307 views 10848 12192 Tentative ajout produit 34, quantité 1
-INFO 2025-07-09 00:23:31,037 views 10848 16280 Tentative ajout produit 34, quantité 1
-INFO 2025-07-09 23:10:28,082 views 20384 12680 Tentative ajout produit 37, quantité 1
-INFO 2025-07-09 23:12:26,655 views 20384 12680 Tentative ajout produit 34, quantité 1
-ERROR 2025-07-12 02:33:15,401 views 8288 21344 Erreur modération produit 1: Cannot resolve keyword 'date_creation' into field. Choices are: avis, categorie, categorie_id, commercant, commercant_id, date_moderation, derniere_verification, description, est_approuve, est_visible, evaluations_qualite, favori, historique_moderation, id, imageproduit, moderateur, moderateur_id, nom, notification, raison_rejet, reference, score_qualite, signalements, specificationproduit, statut_moderation
-ERROR 2025-07-12 02:40:05,692 views 9064 18440 Erreur modération produit 1: No Produit matches the given query.
-ERROR 2025-07-12 14:10:19,711 views 18288 11296 Erreur modération produit 41: name 'ModerationActionSerializer' is not defined
-ERROR 2025-07-12 14:10:19,758 views 18288 4808 Erreur modération produit 41: name 'ModerationActionSerializer' is not defined
-ERROR 2025-07-12 14:10:19,775 views 18288 12756 Erreur modération produit 39: name 'ModerationActionSerializer' is not defined
-ERROR 2025-07-12 14:10:19,791 views 18288 8916 Erreur modération produit 38: name 'ModerationActionSerializer' is not defined
+INFO 2025-07-09 00:02:07,541 views 10848 12192 Tentative ajout produit 34, quantitï¿½ 1
+INFO 2025-07-09 00:03:50,143 views 10848 12192 Tentative ajout produit 34, quantitï¿½ 1
+INFO 2025-07-09 00:05:35,307 views 10848 12192 Tentative ajout produit 34, quantitï¿½ 1
+INFO 2025-07-09 00:23:31,037 views 10848 16280 Tentative ajout produit 34, quantitï¿½ 1
+INFO 2025-07-09 23:10:28,082 views 20384 12680 Tentative ajout produit 37, quantitï¿½ 1
+INFO 2025-07-09 23:12:26,655 views 20384 12680 Tentative ajout produit 34, quantitï¿½ 1
+ERROR 2025-07-12 02:33:15,401 views 8288 21344 Erreur modï¿½ration produit 1: Cannot resolve keyword 'date_creation' into field. Choices are: avis, categorie, categorie_id, commercant, commercant_id, date_moderation, derniere_verification, description, est_approuve, est_visible, evaluations_qualite, favori, historique_moderation, id, imageproduit, moderateur, moderateur_id, nom, notification, raison_rejet, reference, score_qualite, signalements, specificationproduit, statut_moderation
+ERROR 2025-07-12 02:40:05,692 views 9064 18440 Erreur modï¿½ration produit 1: No Produit matches the given query.
+ERROR 2025-07-12 14:10:19,711 views 18288 11296 Erreur modï¿½ration produit 41: name 'ModerationActionSerializer' is not defined
+ERROR 2025-07-12 14:10:19,758 views 18288 4808 Erreur modï¿½ration produit 41: name 'ModerationActionSerializer' is not defined
+ERROR 2025-07-12 14:10:19,775 views 18288 12756 Erreur modï¿½ration produit 39: name 'ModerationActionSerializer' is not defined
+ERROR 2025-07-12 14:10:19,791 views 18288 8916 Erreur modï¿½ration produit 38: name 'ModerationActionSerializer' is not defined
 ERROR 2025-07-12 14:26:16,898 views 1704 17480 Erreur dans list: Field name `images` is not valid for model `Produit` in `myapp.serializers.ProduitSerializer`.
 ERROR 2025-07-12 14:27:34,844 views 1704 936 Erreur dans list: Field name `images` is not valid for model `Produit` in `myapp.serializers.ProduitSerializer`.
 ERROR 2025-07-12 14:28:00,524 views 1704 16908 Erreur dans list: Field name `images` is not valid for model `Produit` in `myapp.serializers.ProduitSerializer`.
@@ -54,3 +54,50 @@ ERROR 2025-07-12 16:09:35,827 views 20484 20012 Erreur dans list: Field name `im
 ERROR 2025-07-12 16:12:09,021 views 20484 2120 Erreur dans list: Field name `images` is not valid for model `Produit` in `myapp.serializers.ProduitSerializer`.
 ERROR 2025-07-12 16:12:09,070 views 20484 2120 Erreur dans list: Field name `images` is not valid for model `Produit` in `myapp.serializers.ProduitSerializer`.
 ERROR 2025-07-12 16:12:09,266 views 20484 20012 Erreur dans list: Field name `images` is not valid for model `Produit` in `myapp.serializers.ProduitSerializer`.
+INFO 2025-07-12 16:28:47,096 views 23564 3520 Tentative ajout produit 41, quantitï¿½ 1
+INFO 2025-07-13 01:17:17,444 views 17120 15304 Produit trouvï¿½: Chaussures Adidas UltraBoost
+INFO 2025-07-13 01:17:17,529 views 17120 15304 Client temporaire crï¿½ï¿½: Client Temporaire (ID: 1)
+INFO 2025-07-13 01:17:17,530 views 17120 15304 Client trouvï¿½/crï¿½ï¿½: Client Temporaire (ID: 1)
+INFO 2025-07-13 01:17:17,533 views 17120 15304 Spï¿½cification trouvï¿½e: test (ID: 8, Stock: 14)
+INFO 2025-07-13 01:17:17,545 views 17120 15304 Nouvel article crï¿½ï¿½: 1
+INFO 2025-07-13 01:59:21,969 views 17120 9188 Produit trouvï¿½: Chaussures Adidas UltraBoost
+INFO 2025-07-13 01:59:21,974 views 17120 9188 Client trouvï¿½/crï¿½ï¿½: Client Temporaire (ID: 1)
+INFO 2025-07-13 01:59:21,979 views 17120 9188 Spï¿½cification trouvï¿½e: test (ID: 8, Stock: 14)
+INFO 2025-07-13 01:59:22,019 views 17120 9188 Quantitï¿½ mise ï¿½ jour: 4
+INFO 2025-07-13 15:07:51,719 views 18648 7836 Produit trouvï¿½: T-shirt Nike Dri-FIT
+INFO 2025-07-13 15:07:51,740 views 18648 7836 Client trouvï¿½/crï¿½ï¿½: Client Temporaire (ID: 1)
+INFO 2025-07-13 15:07:51,742 views 18648 7836 Spï¿½cification trouvï¿½e: nike (ID: 7, Stock: 14)
+INFO 2025-07-13 15:07:51,777 views 18648 7836 Nouvel article crï¿½ï¿½: 2
+INFO 2025-07-13 16:24:02,379 views 10068 26524 Produit 34 ajoutï¿½ aux favoris pour client 1
+INFO 2025-07-13 16:24:02,407 views 10068 26524 Produit 34 retirï¿½ des favoris pour client 1
+INFO 2025-07-13 16:24:50,281 views 10068 11580 Produit 34 ajoutï¿½ aux favoris pour client 1
+INFO 2025-07-13 16:24:50,303 views 10068 11580 Produit 34 retirï¿½ des favoris pour client 1
+INFO 2025-07-13 16:25:09,635 views 10068 11580 Produit 36 ajoutï¿½ aux favoris pour client 1
+INFO 2025-07-13 16:25:09,656 views 10068 11580 Produit 36 retirï¿½ des favoris pour client 1
+INFO 2025-07-13 16:46:05,912 views 10068 13940 Produit 34 ajoutï¿½ aux favoris pour client 1
+INFO 2025-07-13 16:46:05,937 views 10068 13940 Produit 34 retirï¿½ des favoris pour client 1
+INFO 2025-07-13 16:49:18,165 views 10068 13940 Produit 41 ajoutï¿½ aux favoris pour client 1
+INFO 2025-07-13 16:49:18,185 views 10068 13940 Produit 41 retirï¿½ des favoris pour client 1
+INFO 2025-07-13 16:55:29,620 views 10068 32676 Produit 34 ajoutï¿½ aux favoris pour client 1
+INFO 2025-07-13 16:55:29,673 views 10068 32676 Produit 34 retirï¿½ des favoris pour client 1
+INFO 2025-07-13 16:56:00,377 views 10068 32676 Produit 34 ajoutï¿½ aux favoris pour client 1
+INFO 2025-07-13 16:56:00,466 views 10068 32676 Produit 34 retirï¿½ des favoris pour client 1
+INFO 2025-07-13 16:56:37,366 views 10068 32676 Produit 34 ajoutï¿½ aux favoris pour client 1
+INFO 2025-07-13 16:56:37,483 views 10068 32676 Produit 34 retirï¿½ des favoris pour client 1
+INFO 2025-07-13 16:57:29,881 views 10068 32676 Produit 41 ajoutï¿½ aux favoris pour client 1
+INFO 2025-07-13 16:57:30,005 views 10068 32676 Produit 41 retirï¿½ des favoris pour client 1
+INFO 2025-07-13 16:58:22,920 views 10068 32676 Produit 35 ajoutï¿½ aux favoris pour client 1
+INFO 2025-07-13 16:58:22,982 views 10068 32676 Produit 35 retirï¿½ des favoris pour client 1
+INFO 2025-07-13 17:08:45,743 views 10068 18392 Produit 39 ajoutï¿½ aux favoris pour client 1
+INFO 2025-07-13 17:08:45,838 views 10068 18392 Produit 39 retirï¿½ des favoris pour client 1
+INFO 2025-07-13 17:08:54,219 views 10068 18392 Produit 34 ajoutï¿½ aux favoris pour client 1
+INFO 2025-07-13 17:08:54,272 views 10068 18392 Produit 34 retirï¿½ des favoris pour client 1
+INFO 2025-07-13 17:12:52,039 views 10068 17292 Produit 34 ajoutï¿½ aux favoris pour client 1
+INFO 2025-07-13 17:12:52,125 views 10068 17292 Produit 34 retirï¿½ des favoris pour client 1
+INFO 2025-07-13 20:33:39,710 views 31496 10364 Produit trouvï¿½: test
+INFO 2025-07-13 20:33:39,715 views 31496 10364 Client trouvï¿½/crï¿½ï¿½: Client Temporaire (ID: 1)
+INFO 2025-07-13 20:33:39,717 views 31496 10364 Spï¿½cification trouvï¿½e: spe (ID: 19, Stock: 3)
+INFO 2025-07-13 21:09:58,535 views 31496 14196 Produit trouvï¿½: Chaussures Adidas UltraBoost
+INFO 2025-07-13 21:09:58,539 views 31496 14196 Client trouvï¿½/crï¿½ï¿½: Client Temporaire (ID: 1)
+INFO 2025-07-13 21:09:58,544 views 31496 14196 Spï¿½cification trouvï¿½e: test (ID: 8, Stock: 14)
+INFO 2025-07-13 21:09:58,556 views 31496 14196 Nouvel article crï¿½ï¿½: 3
