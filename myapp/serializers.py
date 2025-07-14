@@ -74,16 +74,26 @@ class SpecificationProduitSerializer(serializers.ModelSerializer):
 
 # ===== 2. SERIALIZER PRODUIT PRINCIPAL (MAINTENANT QU'ON A CATÉGORIE) =====
 
+# Dans serializers.py - REMPLACER ProduitSerializer par cette version
+
 class ProduitSerializer(serializers.ModelSerializer):
     """Serializer principal pour les produits"""
     images = ImageProduitSerializer(many=True, read_only=True, source='imageproduit_set')
     specifications = SpecificationProduitSerializer(many=True, read_only=True, source='specificationproduit_set')
     
-    # ✅ MAINTENANT CategorieSerializer EST DÉFINI
+    # Catégorie (existant)
     categorie = CategorieSerializer(read_only=True)
     categorie_id = serializers.IntegerField(write_only=True, required=False, allow_null=True)
     
-    # ✅ CHAMPS CALCULÉS SÉCURISÉS
+    # ✅ NOUVEAU : Champs vendeur
+    vendeur = serializers.StringRelatedField(read_only=True)  # Affichage nom boutique
+    vendeur_id = serializers.IntegerField(write_only=True, required=False, allow_null=True)
+    
+    # ✅ NOUVEAU : Informations vendeur en lecture seule
+    nom_boutique = serializers.SerializerMethodField()
+    ville_boutique = serializers.SerializerMethodField()
+    
+    # Champs calculés existants
     prix_min = serializers.SerializerMethodField()
     prix_max = serializers.SerializerMethodField()
     stock_total = serializers.SerializerMethodField()
@@ -94,15 +104,31 @@ class ProduitSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'nom', 'description', 'reference', 'commercant',
             'categorie', 'categorie_id', 
+            'vendeur', 'vendeur_id', 'nom_boutique', 'ville_boutique',  # ✅ NOUVEAU
             'images', 'specifications',
             'prix_min', 'prix_max', 'stock_total', 'image_principale'
         ]
         extra_kwargs = {
             'commercant': {'required': False, 'allow_null': True},
+            'vendeur_id': {'required': False, 'allow_null': True},
         }
     
+    def get_nom_boutique(self, obj):
+        """✅ NOUVEAU : Nom de la boutique du vendeur"""
+        try:
+            return obj.vendeur.nom_boutique if obj.vendeur else None
+        except:
+            return None
+    
+    def get_ville_boutique(self, obj):
+        """✅ NOUVEAU : Ville de la boutique"""
+        try:
+            return obj.vendeur.ville if obj.vendeur else None
+        except:
+            return None
+    
+    # Méthodes existantes inchangées
     def get_prix_min(self, obj):
-        """Prix minimum parmi toutes les spécifications"""
         try:
             specs = obj.specificationproduit_set.all()
             if specs:
@@ -113,7 +139,6 @@ class ProduitSerializer(serializers.ModelSerializer):
             return 0
     
     def get_prix_max(self, obj):
-        """Prix maximum parmi toutes les spécifications"""
         try:
             specs = obj.specificationproduit_set.all()
             if specs:
@@ -124,7 +149,6 @@ class ProduitSerializer(serializers.ModelSerializer):
             return 0
     
     def get_stock_total(self, obj):
-        """Stock total de toutes les spécifications"""
         try:
             specs = obj.specificationproduit_set.all()
             return sum(spec.quantite_stock for spec in specs)
@@ -132,7 +156,6 @@ class ProduitSerializer(serializers.ModelSerializer):
             return 0
     
     def get_image_principale(self, obj):
-        """Image principale du produit"""
         try:
             image_principale = obj.imageproduit_set.filter(est_principale=True).first()
             if image_principale:
@@ -141,7 +164,6 @@ class ProduitSerializer(serializers.ModelSerializer):
                     'url_image': image_principale.url_image,
                     'ordre': image_principale.ordre
                 }
-            # Si pas d'image principale, prendre la première
             premiere_image = obj.imageproduit_set.first()
             if premiere_image:
                 return {
@@ -154,10 +176,13 @@ class ProduitSerializer(serializers.ModelSerializer):
             return None
     
     def create(self, validated_data):
-        """Créer un produit avec catégorie"""
+        """✅ MODIFIÉ : Créer un produit avec vendeur et catégorie"""
         categorie_id = validated_data.pop('categorie_id', None)
+        vendeur_id = validated_data.pop('vendeur_id', None)  # ✅ NOUVEAU
+        
         produit = Produit.objects.create(**validated_data)
         
+        # Associer catégorie
         if categorie_id:
             try:
                 categorie = Categorie.objects.get(id=categorie_id)
@@ -166,15 +191,26 @@ class ProduitSerializer(serializers.ModelSerializer):
             except Categorie.DoesNotExist:
                 pass
         
+        # ✅ NOUVEAU : Associer vendeur (optionnel car fait dans perform_create)
+        if vendeur_id:
+            try:
+                vendeur = ProfilVendeur.objects.get(id=vendeur_id)
+                produit.vendeur = vendeur
+                produit.save()
+            except ProfilVendeur.DoesNotExist:
+                pass
+        
         return produit
     
     def update(self, instance, validated_data):
-        """Mettre à jour un produit avec catégorie"""
+        """✅ MODIFIÉ : Mettre à jour avec catégorie et vendeur"""
         categorie_id = validated_data.pop('categorie_id', None)
+        vendeur_id = validated_data.pop('vendeur_id', None)
         
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
         
+        # Catégorie
         if categorie_id is not None:
             try:
                 if categorie_id == '' or categorie_id is None:
@@ -183,6 +219,17 @@ class ProduitSerializer(serializers.ModelSerializer):
                     categorie = Categorie.objects.get(id=categorie_id)
                     instance.categorie = categorie
             except Categorie.DoesNotExist:
+                pass
+        
+        # ✅ NOUVEAU : Vendeur (normalement ne devrait pas changer)
+        if vendeur_id is not None:
+            try:
+                if vendeur_id == '' or vendeur_id is None:
+                    instance.vendeur = None
+                else:
+                    vendeur = ProfilVendeur.objects.get(id=vendeur_id)
+                    instance.vendeur = vendeur
+            except ProfilVendeur.DoesNotExist:
                 pass
         
         instance.save()

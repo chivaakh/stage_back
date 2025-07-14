@@ -302,6 +302,13 @@ class FacebookLoginView(APIView):
             }
         }, status=status.HTTP_200_OK)
 
+
+@csrf_exempt
+def logout_view(request):
+    if request.method == 'POST':
+        request.session.flush()  # Supprime toutes les données de session (y compris user_id)
+        return JsonResponse({'message': 'Déconnexion réussie'}, status=200)
+    return JsonResponse({'error': 'Méthode non autorisée'}, status=405)
 # ===========================
 # VUES PROFIL VENDEUR
 # ===========================
@@ -759,47 +766,204 @@ class PanierViewSet(viewsets.ModelViewSet):
 # VIEWSETS PRODUITS VENDEUR
 # ===========================
 
+def get_current_vendor(request):
+    """
+    ✅ FONCTION UTILITAIRE : Récupère le vendeur connecté depuis la session
+    """
+    user_id = request.session.get('user_id')
+    if not user_id:
+        return None, "Vous devez être connecté"
+    
+    try:
+        utilisateur = Utilisateur.objects.get(id_utilisateur=user_id)
+        
+        if utilisateur.type_utilisateur != 'vendeur':
+            return None, "Seuls les vendeurs peuvent accéder à cette ressource"
+        
+        try:
+            profil_vendeur = utilisateur.profil_vendeur
+            return profil_vendeur, None
+        except ProfilVendeur.DoesNotExist:
+            return None, "Profil vendeur introuvable"
+            
+    except Utilisateur.DoesNotExist:
+        return None, "Utilisateur introuvable"
+
+def require_vendor_permission(view_func):
+    """
+    ✅ DÉCORATEUR : S'assurer qu'un vendeur ne peut agir que sur ses produits
+    """
+    def wrapper(view_instance, request, *args, **kwargs):
+        # Pour les méthodes qui modifient un produit existant
+        if hasattr(view_instance, 'get_object'):
+            try:
+                obj = view_instance.get_object()
+                vendor, error = get_current_vendor(request)
+                
+                if error:
+                    return Response({'error': error}, status=status.HTTP_401_UNAUTHORIZED)
+                
+                if hasattr(obj, 'vendeur') and obj.vendeur != vendor:
+                    return Response(
+                        {'error': 'Vous ne pouvez modifier que vos propres produits'}, 
+                        status=status.HTTP_403_FORBIDDEN
+                    )
+            except:
+                pass
+        
+        return view_func(view_instance, request, *args, **kwargs)
+    return wrapper
+
+# ---------------------------
+# DÉCORATEUR ALTERNATIF POUR LES MÉTHODES DE CLASSE
+# ---------------------------
+
+from functools import wraps
+
+def vendor_required(f):
+    """
+    ✅ DÉCORATEUR : Vérifier qu'un vendeur est connecté
+    """
+    @wraps(f)
+    def decorated_function(self, request, *args, **kwargs):
+        vendor, error = get_current_vendor(request)
+        if error:
+            return Response({'error': error}, status=status.HTTP_401_UNAUTHORIZED)
+        
+        # Ajouter le vendeur à la request pour usage dans la méthode
+        request.current_vendor = vendor
+        return f(self, request, *args, **kwargs)
+    
+    return decorated_function
+
+
+
+# Modifier ProduitViewSet
 class ProduitViewSet(viewsets.ModelViewSet):
     serializer_class = ProduitSerializer
-    permission_classes = [AllowAny]
-    pagination_class = CustomPagination
-    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
-    
-    filterset_fields = ['categorie']
-    search_fields = ['nom', 'description', 'reference']
-    ordering_fields = ['nom', 'id']
-    ordering = ['-id']
+    permission_classes = [AllowAny]  # ✅ À changer en IsAuthenticated en production
 
     def get_queryset(self):
-        """Optimiser les requêtes avec prefetch et annotations"""
-        queryset = Produit.objects.prefetch_related(
-            'imageproduit_set', 
-            'specificationproduit_set'
-        ).select_related('commercant', 'categorie')
+        """✅ NOUVEAU : Filtrer les produits selon le vendeur connecté"""
+        # Obtenir l'ID utilisateur de la session
+        user_id = self.request.session.get('user_id')
         
-        stock_filter = self.request.query_params.get('stock_filter', None)
-        if stock_filter:
-            if stock_filter == 'in_stock':
-                queryset = queryset.filter(specificationproduit__quantite_stock__gt=5)
-            elif stock_filter == 'low_stock':
-                queryset = queryset.filter(
-                    specificationproduit__quantite_stock__lte=5,
-                    specificationproduit__quantite_stock__gt=0
-                )
-            elif stock_filter == 'out_of_stock':
-                queryset = queryset.filter(
-                    Q(specificationproduit__quantite_stock=0) |
-                    Q(specificationproduit__isnull=True)
-                )
+        if not user_id:
+            # Si pas connecté, retourner queryset vide
+            return Produit.objects.none()
         
-        return queryset.distinct()
+        try:
+            # Obtenir l'utilisateur connecté
+            utilisateur = Utilisateur.objects.get(id_utilisateur=user_id)
+            
+            # Vérifier que c'est un vendeur
+            if utilisateur.type_utilisateur != 'vendeur':
+                return Produit.objects.none()
+            
+            # Obtenir le profil vendeur
+            profil_vendeur = utilisateur.profil_vendeur
+            
+            # ✅ FILTRER : Retourner seulement les produits de ce vendeur
+            return Produit.objects.filter(
+                vendeur=profil_vendeur
+            ).prefetch_related(
+                'imageproduit_set', 'specificationproduit_set'
+            ).select_related('commercant', 'categorie', 'vendeur')
+            
+        except (Utilisateur.DoesNotExist, ProfilVendeur.DoesNotExist):
+            return Produit.objects.none()
+
+    def perform_create(self, serializer):
+        """✅ NOUVEAU : Associer automatiquement le produit au vendeur connecté"""
+        user_id = self.request.session.get('user_id')
+        
+        if not user_id:
+            raise serializers.ValidationError("Vous devez être connecté pour créer un produit")
+        
+        try:
+            utilisateur = Utilisateur.objects.get(id_utilisateur=user_id)
+            
+            if utilisateur.type_utilisateur != 'vendeur':
+                raise serializers.ValidationError("Seuls les vendeurs peuvent créer des produits")
+            
+            profil_vendeur = utilisateur.profil_vendeur
+            
+            # ✅ ASSOCIER automatiquement au vendeur connecté
+            serializer.save(vendeur=profil_vendeur)
+            
+        except (Utilisateur.DoesNotExist, ProfilVendeur.DoesNotExist):
+            raise serializers.ValidationError("Profil vendeur introuvable")
+
+    def perform_update(self, serializer):
+        """✅ NOUVEAU : S'assurer qu'un vendeur ne peut modifier que ses produits"""
+        user_id = self.request.session.get('user_id')
+        
+        if not user_id:
+            raise serializers.ValidationError("Vous devez être connecté")
+        
+        try:
+            utilisateur = Utilisateur.objects.get(id_utilisateur=user_id)
+            profil_vendeur = utilisateur.profil_vendeur
+            
+            # Vérifier que le produit appartient bien au vendeur connecté
+            if serializer.instance.vendeur != profil_vendeur:
+                raise serializers.ValidationError("Vous ne pouvez modifier que vos propres produits")
+            
+            serializer.save()
+            
+        except (Utilisateur.DoesNotExist, ProfilVendeur.DoesNotExist):
+            raise serializers.ValidationError("Profil vendeur introuvable")
+
+    def perform_destroy(self, instance):
+        """✅ NOUVEAU : S'assurer qu'un vendeur ne peut supprimer que ses produits"""
+        user_id = self.request.session.get('user_id')
+        
+        if not user_id:
+            raise serializers.ValidationError("Vous devez être connecté")
+        
+        try:
+            utilisateur = Utilisateur.objects.get(id_utilisateur=user_id)
+            profil_vendeur = utilisateur.profil_vendeur
+            
+            # Vérifier que le produit appartient bien au vendeur connecté
+            if instance.vendeur != profil_vendeur:
+                raise serializers.ValidationError("Vous ne pouvez supprimer que vos propres produits")
+            
+            instance.delete()
+            
+        except (Utilisateur.DoesNotExist, ProfilVendeur.DoesNotExist):
+            raise serializers.ValidationError("Profil vendeur introuvable")
 
     def create(self, request, *args, **kwargs):
-        """Créer un produit avec images et spécifications"""
-        logger.info(f"🔍 Données reçues pour création: {request.data}")
+        """✅ MODIFIÉ : Créer un produit avec vérification vendeur"""
+        logger.info(f"🔍 Création produit par user_id: {request.session.get('user_id')}")
         
         try:
             with transaction.atomic():
+                # 1. Vérifier l'authentification
+                user_id = request.session.get('user_id')
+                if not user_id:
+                    return Response(
+                        {'error': 'Vous devez être connecté pour créer un produit'}, 
+                        status=status.HTTP_401_UNAUTHORIZED
+                    )
+                
+                # 2. Vérifier le profil vendeur
+                try:
+                    utilisateur = Utilisateur.objects.get(id_utilisateur=user_id)
+                    if utilisateur.type_utilisateur != 'vendeur':
+                        return Response(
+                            {'error': 'Seuls les vendeurs peuvent créer des produits'}, 
+                            status=status.HTTP_403_FORBIDDEN
+                        )
+                    profil_vendeur = utilisateur.profil_vendeur
+                except (Utilisateur.DoesNotExist, ProfilVendeur.DoesNotExist):
+                    return Response(
+                        {'error': 'Profil vendeur introuvable'}, 
+                        status=status.HTTP_404_NOT_FOUND
+                    )
+                
+                # 3. Extraire les données
                 produit_data = {
                     'nom': request.data.get('nom'),
                     'description': request.data.get('description'),
@@ -808,20 +972,21 @@ class ProduitViewSet(viewsets.ModelViewSet):
                 
                 if request.data.get('categorie'):
                     produit_data['categorie_id'] = request.data.get('categorie')
+
                 
                 images_data = request.data.get('images', [])
                 specifications_data = request.data.get('specifications', [])
                 
-                logger.info(f"📦 Produit: {produit_data}")
-                logger.info(f"🖼️ Images reçues: {len(images_data)} images")
-                logger.info(f"📋 Spécifications: {len(specifications_data)} specs")
+                logger.info(f"📦 Produit pour vendeur: {profil_vendeur.nom_boutique}")
                 
+                # 4. Créer le produit avec vendeur
                 produit_serializer = ProduitSerializer(data=produit_data)
                 if produit_serializer.is_valid():
-                    produit = produit_serializer.save()
-                    logger.info(f"✅ Produit créé avec ID: {produit.id}")
+                    # ✅ ASSOCIER au vendeur connecté
+                    produit = produit_serializer.save(vendeur=profil_vendeur)
+                    logger.info(f"✅ Produit créé avec ID: {produit.id} pour vendeur: {profil_vendeur.nom_boutique}")
                     
-                    # Ajouter les images
+                    # 5. Ajouter les images et spécifications (code existant)
                     images_creees = 0
                     for i, image_data in enumerate(images_data):
                         if image_data.get('url_image'):
@@ -837,9 +1002,6 @@ class ProduitViewSet(viewsets.ModelViewSet):
                             except Exception as e:
                                 logger.error(f"❌ Erreur création image {i+1}: {str(e)}")
                     
-                    logger.info(f"📸 Total images créées: {images_creees}")
-                    
-                    # Ajouter les spécifications
                     specs_creees = 0
                     for spec_data in specifications_data:
                         if spec_data.get('nom') and spec_data.get('prix'):
@@ -859,120 +1021,313 @@ class ProduitViewSet(viewsets.ModelViewSet):
                             except Exception as e:
                                 logger.error(f"❌ Erreur création spécification: {str(e)}")
                     
-                    logger.info(f"📋 Total spécifications créées: {specs_creees}")
-                    
+                    # 6. Retourner le produit complet
                     produit_complet = self.get_queryset().get(id=produit.id)
                     response_data = ProduitSerializer(produit_complet).data
-                    logger.info(f"📤 Réponse API finale: {response_data}")
                     
+                    logger.info(f"📤 Produit créé avec succès: {produit.nom} pour {profil_vendeur.nom_boutique}")
                     return Response(response_data, status=status.HTTP_201_CREATED)
+                    
                 else:
                     logger.error(f"❌ Erreurs validation produit: {produit_serializer.errors}")
                     return Response(produit_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
                     
         except Exception as e:
-            logger.error(f"❌ Erreur lors de la création complète: {str(e)}")
+            logger.error(f"❌ Erreur lors de la création: {str(e)}")
             logger.error(f"❌ Traceback: {traceback.format_exc()}")
             return Response(
                 {'error': f'Erreur serveur: {str(e)}'}, 
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
-    def update(self, request, *args, **kwargs):
-        """Mettre à jour un produit avec toutes ses relations"""
-        partial = kwargs.pop('partial', False)
-        instance = self.get_object()
+    @action(detail=True, methods=['post'])
+    def add_image(self, request, pk=None):
+        """Ajouter une image à un produit existant"""
+        produit = self.get_object()
         
-        try:
-            with transaction.atomic():
-                produit_data = {
-                    'nom': request.data.get('nom', instance.nom),
-                    'description': request.data.get('description', instance.description),
-                    'reference': request.data.get('reference', instance.reference),
-                }
-                
-                if 'categorie' in request.data:
-                    produit_data['categorie_id'] = request.data.get('categorie')
-                
-                serializer = self.get_serializer(instance, data=produit_data, partial=partial)
-                serializer.is_valid(raise_exception=True)
-                produit = serializer.save()
-                
-                # Mettre à jour les images si fournies
-                if 'images' in request.data:
-                    instance.imageproduit_set.all().delete()
-                    
-                    for i, image_data in enumerate(request.data.get('images', [])):
-                        if image_data.get('url_image'):
-                            ImageProduit.objects.create(
-                                produit=produit,
-                                url_image=image_data['url_image'],
-                                est_principale=image_data.get('est_principale', False),
-                                ordre=image_data.get('ordre', i)
-                            )
-                
-                # Mettre à jour les spécifications si fournies
-                if 'specifications' in request.data:
-                    instance.specificationproduit_set.all().delete()
-                    
-                    for spec_data in request.data.get('specifications', []):
-                        if spec_data.get('nom') and spec_data.get('prix'):
-                            SpecificationProduit.objects.create(
-                                produit=produit,
-                                nom=spec_data['nom'],
-                                description=spec_data.get('description', ''),
-                                prix=float(spec_data['prix']),
-                                prix_promo=float(spec_data['prix_promo']) if spec_data.get('prix_promo') else None,
-                                quantite_stock=int(spec_data.get('quantite_stock', 0)),
-                                est_defaut=spec_data.get('est_defaut', False),
-                                reference_specification=spec_data.get('reference_specification', '')
-                            )
-                
-                produit_complet = self.get_queryset().get(id=produit.id)
-                response_data = ProduitSerializer(produit_complet).data
-                
-                return Response(response_data)
-                
-        except Exception as e:
-            logger.error(f"❌ Erreur lors de la mise à jour: {str(e)}")
-            return Response(
-                {'error': f'Erreur serveur: {str(e)}'}, 
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
+        data = request.data.copy()
+        data['produit'] = produit.id
+        
+        serializer = ImageProduitSerializer(data=data)
+        if serializer.is_valid():
+            # Si c'est marqué comme principale, retirer le flag des autres
+            if data.get('est_principale', False):
+                ImageProduit.objects.filter(produit=produit, est_principale=True).update(est_principale=False)
+            
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-    @action(detail=False, methods=['get'])
-    def stats(self, request):
-        """Statistiques des produits"""
-        queryset = self.get_queryset()
+    @action(detail=True, methods=['post'])
+    def add_specification(self, request, pk=None):
+        """Ajouter une spécification à un produit existant"""
+        produit = self.get_object()
         
-        stats = {
-            'total': queryset.count(),
-            'en_stock': queryset.filter(specificationproduit__quantite_stock__gt=5).distinct().count(),
-            'stock_faible': queryset.filter(
-                specificationproduit__quantite_stock__lte=5,
-                specificationproduit__quantite_stock__gt=0
-            ).distinct().count(),
-            'rupture': queryset.filter(
-                Q(specificationproduit__quantite_stock=0) |
-                Q(specificationproduit__isnull=True)
-            ).distinct().count(),
-            'avec_images': queryset.filter(imageproduit__isnull=False).distinct().count()
-        }
+        data = request.data.copy()
+        data['produit'] = produit.id
         
-        return Response(stats)
+        serializer = SpecificationProduitSerializer(data=data)
+        if serializer.is_valid():
+            # Si c'est marqué comme défaut, retirer le flag des autres
+            if data.get('est_defaut', False):
+                SpecificationProduit.objects.filter(produit=produit, est_defaut=True).update(est_defaut=False)
+            
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    @action(detail=True, methods=['get'])
+    def images(self, request, pk=None):
+        """Récupérer toutes les images d'un produit"""
+        produit = self.get_object()
+        images = produit.imageproduit_set.all().order_by('ordre', '-est_principale')
+        serializer = ImageProduitSerializer(images, many=True)
+        return Response(serializer.data)
+
+    @action(detail=True, methods=['get'])
+    def specifications(self, request, pk=None):
+        """Récupérer toutes les spécifications d'un produit"""
+        produit = self.get_object()
+        specs = produit.specificationproduit_set.all().order_by('-est_defaut')
+        serializer = SpecificationProduitSerializer(specs, many=True)
+        return Response(serializer.data)
 
     def perform_create(self, serializer):
         # Temporaire : associer au premier commerçant trouvé
-        try:
-            from .models import DetailsCommercant
-            commercant = DetailsCommercant.objects.first()
-            if commercant:
-                serializer.save(commercant=commercant)
-            else:
-                serializer.save()
-        except:
+        from .models import DetailsCommercant
+        commercant = DetailsCommercant.objects.first()
+        if commercant:
+            serializer.save(commercant=commercant)
+        else:
             serializer.save()
 
+
+
+
+class VendorAuthMiddleware:
+    """
+    ✅ MIDDLEWARE : Pour débugger l'authentification vendeur
+    """
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        # Log de la session pour debug
+        user_id = request.session.get('user_id')
+        if user_id and request.path.startswith('/api/'):
+            try:
+                user = Utilisateur.objects.get(id_utilisateur=user_id)
+                print(f"🔍 User connecté: {user.nom} ({user.type_utilisateur})")
+                
+                if user.type_utilisateur == 'vendeur':
+                    try:
+                        vendor = user.profil_vendeur
+                        print(f"🏪 Boutique: {vendor.nom_boutique}")
+                    except ProfilVendeur.DoesNotExist:
+                        print("❌ Pas de profil vendeur")
+                        
+            except Utilisateur.DoesNotExist:
+                print(f"❌ User ID {user_id} introuvable")
+        
+        response = self.get_response(request)
+        return response
+
+
+
+@csrf_exempt
+def vendor_products_debug(request):
+    """
+    ✅ VUE DE DEBUG : Vérifier que chaque vendeur voit bien ses produits
+    """
+    try:
+        # Obtenir tous les vendeurs
+        vendeurs = ProfilVendeur.objects.all()
+        debug_info = {
+            'total_vendeurs': vendeurs.count(),
+            'total_produits': Produit.objects.count(),
+            'vendeurs_detail': []
+        }
+        
+        for vendeur in vendeurs:
+            produits_vendeur = Produit.objects.filter(vendeur=vendeur)
+            vendeur_info = {
+                'id': vendeur.id,
+                'nom_boutique': vendeur.nom_boutique,
+                'ville': vendeur.ville,
+                'utilisateur_id': vendeur.utilisateur.id_utilisateur,
+                'nombre_produits': produits_vendeur.count(),
+                'produits': []
+            }
+            
+            for produit in produits_vendeur:
+                vendeur_info['produits'].append({
+                    'id': produit.id,
+                    'nom': produit.nom,
+                    'reference': produit.reference,
+                    'vendeur_nom': produit.vendeur.nom_boutique if produit.vendeur else None
+                })
+            
+            debug_info['vendeurs_detail'].append(vendeur_info)
+        
+        # Produits sans vendeur
+        produits_orphelins = Produit.objects.filter(vendeur__isnull=True)
+        debug_info['produits_sans_vendeur'] = {
+            'count': produits_orphelins.count(),
+            'produits': [
+                {
+                    'id': p.id,
+                    'nom': p.nom,
+                    'reference': p.reference
+                } for p in produits_orphelins
+            ]
+        }
+        
+        return JsonResponse(debug_info, indent=2)
+        
+    except Exception as e:
+        return JsonResponse({
+            'error': str(e),
+            'traceback': traceback.format_exc()
+        }, status=500)
+
+@csrf_exempt 
+def current_vendor_info(request):
+    """
+    ✅ VUE DE DEBUG : Informations sur le vendeur connecté
+    """
+    try:
+        user_id = request.session.get('user_id')
+        
+        if not user_id:
+            return JsonResponse({
+                'connected': False,
+                'error': 'Aucun utilisateur connecté'
+            })
+        
+        try:
+            utilisateur = Utilisateur.objects.get(id_utilisateur=user_id)
+            
+            info = {
+                'connected': True,
+                'user_id': user_id,
+                'nom': utilisateur.nom,
+                'prenom': utilisateur.prenom,
+                'email': utilisateur.email,
+                'telephone': utilisateur.telephone,
+                'type_utilisateur': utilisateur.type_utilisateur,
+                'est_vendeur': utilisateur.type_utilisateur == 'vendeur'
+            }
+            
+            if utilisateur.type_utilisateur == 'vendeur':
+                try:
+                    profil_vendeur = utilisateur.profil_vendeur
+                    info['boutique'] = {
+                        'id': profil_vendeur.id,
+                        'nom_boutique': profil_vendeur.nom_boutique,
+                        'ville': profil_vendeur.ville,
+                        'est_approuve': profil_vendeur.est_approuve
+                    }
+                    
+                    # Compter les produits de ce vendeur
+                    produits_count = Produit.objects.filter(vendeur=profil_vendeur).count()
+                    info['boutique']['nombre_produits'] = produits_count
+                    
+                except ProfilVendeur.DoesNotExist:
+                    info['boutique'] = None
+                    info['error'] = 'Profil vendeur introuvable'
+            
+            return JsonResponse(info)
+            
+        except Utilisateur.DoesNotExist:
+            return JsonResponse({
+                'connected': False,
+                'error': f'Utilisateur {user_id} introuvable'
+            })
+        
+    except Exception as e:
+        return JsonResponse({
+            'error': str(e),
+            'traceback': traceback.format_exc()
+        }, status=500)
+
+class VendorStatsView(APIView):
+    """
+    ✅ VUE API : Statistiques du vendeur connecté
+    """
+    permission_classes = [AllowAny]
+    
+    def get(self, request):
+        vendor, error = get_current_vendor(request)
+        if error:
+            return Response({'error': error}, status=status.HTTP_401_UNAUTHORIZED)
+        
+        try:
+            # Statistiques des produits du vendeur
+            produits = Produit.objects.filter(vendeur=vendor)
+            
+            stats = {
+                'boutique': {
+                    'nom': vendor.nom_boutique,
+                    'ville': vendor.ville,
+                    'est_approuve': vendor.est_approuve,
+                    'evaluation': float(vendor.evaluation),
+                    'total_ventes': float(vendor.total_ventes)
+                },
+                'produits': {
+                    'total': produits.count(),
+                    'en_stock': 0,
+                    'rupture_stock': 0,
+                    'stock_faible': 0
+                },
+                'categories': {},
+                'derniers_produits': []
+            }
+            
+            # Analyser le stock
+            for produit in produits:
+                stock_total = sum(
+                    spec.quantite_stock 
+                    for spec in produit.specificationproduit_set.all()
+                )
+                
+                if stock_total == 0:
+                    stats['produits']['rupture_stock'] += 1
+                elif stock_total <= 5:
+                    stats['produits']['stock_faible'] += 1
+                else:
+                    stats['produits']['en_stock'] += 1
+                
+                # Compter par catégorie
+                if produit.categorie:
+                    cat_name = produit.categorie.nom
+                    stats['categories'][cat_name] = stats['categories'].get(cat_name, 0) + 1
+            
+            # Derniers produits créés
+            derniers = produits.order_by('-id')[:5]
+            for produit in derniers:
+                stats['derniers_produits'].append({
+                    'id': produit.id,
+                    'nom': produit.nom,
+                    'reference': produit.reference,
+                    'categorie': produit.categorie.nom if produit.categorie else None
+                })
+            
+            return Response(stats)
+            
+        except Exception as e:
+            return Response(
+                {'error': f'Erreur lors du calcul des statistiques: {str(e)}'}, 
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+
+
+
+
+
+
+# À ajouter dans settings.py dans MIDDLEWARE:
+# 'myapp.middleware.VendorAuthMiddleware',
 # ===========================
 # AUTRES VIEWSETS
 # ===========================

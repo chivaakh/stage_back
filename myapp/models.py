@@ -129,12 +129,41 @@ class Categorie(models.Model):
     description = models.TextField()
 
 
+
+# MODIFIER le modèle Produit
 class Produit(models.Model):
     reference = models.CharField(max_length=50)
     nom = models.CharField(max_length=200)
     description = models.TextField()
     categorie = models.ForeignKey('Categorie', on_delete=models.SET_NULL, null=True)
+    
+    #NOUVEAU : Lier directement au ProfilVendeur au lieu de DetailsCommercant
+    vendeur = models.ForeignKey('ProfilVendeur', on_delete=models.CASCADE, null=True, blank=True, related_name='produits')
+    
+    #GARDER commercant pour compatibilité (optionnel)
     commercant = models.ForeignKey('DetailsCommercant', on_delete=models.CASCADE, null=True, blank=True)
+    
+    def save(self, *args, **kwargs):
+        #NOUVEAU : Auto-associer commercant si vendeur est défini
+        if self.vendeur and not self.commercant:
+            try:
+                # Chercher le DetailsCommercant associé au vendeur
+                self.commercant = DetailsCommercant.objects.get(
+                    utilisateur=self.vendeur.utilisateur
+                )
+            except DetailsCommercant.DoesNotExist:
+                # Créer DetailsCommercant si n'existe pas
+                self.commercant = DetailsCommercant.objects.create(
+                    utilisateur=self.vendeur.utilisateur,
+                    nom_boutique=self.vendeur.nom_boutique,
+                    description_boutique=self.vendeur.description or "",
+                    ville=self.vendeur.ville,
+                    est_verifie=self.vendeur.est_approuve
+                )
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"{self.nom} - {self.vendeur.nom_boutique if self.vendeur else 'Sans vendeur'}"
 
 
 class ImageProduit(models.Model):

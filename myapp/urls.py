@@ -11,9 +11,9 @@ from .views import (
     # API Views - Supprimé SignupView qui n'existe pas
     LoginView,
     RequestPasswordResetView, ResetPasswordView,
-    GoogleLoginView, FacebookLoginView, VendeurInfoView,
+    GoogleLoginView, FacebookLoginView, VendeurInfoView, VendorStatsView, current_vendor_info, logout_view,
     # Functions
-    upload_image, debug_products, debug_images_complete,
+    upload_image, debug_products, debug_images_complete, vendor_products_debug,
 )
 
 
@@ -53,7 +53,7 @@ urlpatterns = [
     path('api/profil-vendeur/', CreerProfilVendeurView.as_view(), name='profil_vendeur'),
     path('api/vendeur-info/', VendeurInfoView.as_view(), name='vendeur_info'),
     path('upload-image/', upload_image, name='upload-image'),
-
+    path('api/logout/', logout_view, name='logout'),
 
 
     # Utility URLs
@@ -61,4 +61,11 @@ urlpatterns = [
     path('debug-products/', debug_products, name='debug-products'),
     path('debug-images/', debug_images_complete, name='debug-images'),
 
+
+
+
+
+    path('debug/vendor-products/', vendor_products_debug, name='vendor-products-debug'),
+    path('debug/current-vendor/', current_vendor_info, name='current-vendor-info'),
+    path('api/vendor-stats/', VendorStatsView.as_view(), name='vendor-stats'),
 ]
