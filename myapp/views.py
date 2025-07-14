@@ -522,8 +522,10 @@ class ClientCategorieViewSet(viewsets.ReadOnlyModelViewSet):
         serializer = ClientProduitSerializer(produits, many=True)
         return Response(serializer.data)
 
+# Ajoutez cette correction à votre PanierViewSet dans views.py
+
 class PanierViewSet(viewsets.ModelViewSet):
-    """ViewSet pour la gestion du panier"""
+    """ViewSet pour la gestion du panier - VERSION CORRIGÉE"""
     serializer_class = PanierSerializer
     permission_classes = [AllowAny]  # TEMPORAIRE
     
@@ -537,7 +539,8 @@ class PanierViewSet(viewsets.ModelViewSet):
             return Panier.objects.filter(client=client).select_related(
                 'specification', 'specification__produit'
             ).prefetch_related('specification__produit__imageproduit_set')
-        except:
+        except Exception as e:
+            logger.error(f"Erreur get_queryset panier: {str(e)}")
             return Panier.objects.none()
     
     def get_serializer_class(self):
@@ -550,7 +553,17 @@ class PanierViewSet(viewsets.ModelViewSet):
         try:
             client = DetailsClient.objects.first()
             if not client:
-                raise Exception("Aucun client trouvé dans la base de données")
+                # Créer un client par défaut temporaire
+                client = DetailsClient.objects.create(
+                    utilisateur_id=1,  # Utilisateur par défaut
+                    nom="Client",
+                    prenom="Test",
+                    adresse="Adresse test",
+                    ville="Nouakchott", 
+                    code_postal="00000",
+                    pays="Mauritanie"
+                )
+                logger.info(f"Client temporaire créé: {client.id}")
                 
             specification = serializer.validated_data['specification']
             quantite = serializer.validated_data['quantite']
@@ -579,32 +592,144 @@ class PanierViewSet(viewsets.ModelViewSet):
             logger.error(f"Erreur ajout panier: {str(e)}")
             raise Exception(f"Erreur lors de l'ajout au panier: {str(e)}")
     
-    def perform_update(self, serializer):
-        """Mettre à jour la quantité d'un article"""
+    @action(detail=False, methods=['post'])
+    def ajouter_rapide(self, request):
+        """Ajouter rapidement un produit avec sa spécification par défaut - VERSION CORRIGÉE"""
         try:
+            produit_id = request.data.get('produit_id')
+            quantite = request.data.get('quantite', 1)
+            
+            logger.info(f"🛒 Tentative ajout produit {produit_id}, quantité {quantite}")
+            
+            if not produit_id:
+                return Response(
+                    {'error': 'ID produit requis', 'success': False}, 
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            # Vérifier si le produit existe
+            try:
+                produit = Produit.objects.get(id=produit_id)
+                logger.info(f"Produit trouvé: {produit.nom}")
+            except Produit.DoesNotExist:
+                return Response(
+                    {'error': f'Produit avec ID {produit_id} non trouvé', 'success': False}, 
+                    status=status.HTTP_404_NOT_FOUND
+                )
+            
+            # Récupérer ou créer un client
             client = DetailsClient.objects.first()
             if not client:
-                raise Exception("Aucun client trouvé")
-            if serializer.instance.client != client:
-                raise Exception("Vous ne pouvez modifier que vos articles")
-            serializer.save()
+                # Créer un utilisateur et client temporaires
+                try:
+                    utilisateur = Utilisateur.objects.create(
+                        telephone="temp_user",
+                        nom="Client",
+                        prenom="Temporaire",
+                        type_utilisateur="client",
+                        mot_de_passe="temp_password"
+                    )
+                    client = DetailsClient.objects.create(
+                        utilisateur=utilisateur,
+                        nom="Client",
+                        prenom="Temporaire",
+                        adresse="Adresse temporaire",
+                        ville="Nouakchott",
+                        code_postal="00000",
+                        pays="Mauritanie"
+                    )
+                    logger.info(f"Client temporaire créé: {client.nom} {client.prenom} (ID: {client.id})")
+                except Exception as e:
+                    logger.error(f"Erreur création client: {str(e)}")
+                    return Response(
+                        {'error': 'Erreur lors de la création du client temporaire', 'success': False}, 
+                        status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                    )
+            
+            logger.info(f"Client trouvé/créé: {client.nom} {client.prenom} (ID: {client.id})")
+            
+            # Trouver la spécification par défaut du produit
+            specification = SpecificationProduit.objects.filter(
+                produit_id=produit_id, 
+                est_defaut=True
+            ).first()
+            
+            if not specification:
+                specification = SpecificationProduit.objects.filter(
+                    produit_id=produit_id
+                ).first()
+            
+            if not specification:
+                return Response(
+                    {'error': f'Aucune spécification trouvée pour le produit {produit_id}', 'success': False}, 
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            logger.info(f"Spécification trouvée: {specification.nom} (ID: {specification.id}, Stock: {specification.quantite_stock})")
+            
+            # Vérifier le stock
+            if specification.quantite_stock <= 0:
+                return Response(
+                    {'error': 'Produit en rupture de stock', 'success': False}, 
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            # Vérifier si déjà dans le panier
+            panier_existant = Panier.objects.filter(
+                client=client, 
+                specification=specification
+            ).first()
+            
+            if panier_existant:
+                nouvelle_quantite = panier_existant.quantite + quantite
+                
+                if nouvelle_quantite > specification.quantite_stock:
+                    return Response(
+                        {
+                            'error': f'Stock insuffisant. Disponible: {specification.quantite_stock}, déjà dans panier: {panier_existant.quantite}', 
+                            'success': False
+                        }, 
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+                
+                panier_existant.quantite = nouvelle_quantite
+                panier_existant.save()
+                instance = panier_existant
+                logger.info(f"Quantité mise à jour: {instance.quantite}")
+            else:
+                if quantite > specification.quantite_stock:
+                    return Response(
+                        {
+                            'error': f'Quantité demandée ({quantite}) supérieure au stock disponible ({specification.quantite_stock})', 
+                            'success': False
+                        }, 
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+                
+                instance = Panier.objects.create(
+                    client=client,
+                    specification=specification,
+                    quantite=quantite
+                )
+                logger.info(f"Nouvel article créé: {instance.id}")
+            
+            return Response(
+                {
+                    'message': 'Produit ajouté au panier avec succès', 
+                    'success': True,
+                    'item': PanierSerializer(instance).data
+                },
+                status=status.HTTP_201_CREATED
+            )
+                
         except Exception as e:
-            logger.error(f"Erreur modification panier: {str(e)}")
-            raise Exception(f"Erreur lors de la modification: {str(e)}")
-    
-    def perform_destroy(self, instance):
-        """Supprimer un article du panier"""
-        try:
-            client = DetailsClient.objects.first()
-            if not client:
-                raise Exception("Aucun client trouvé")
-            if instance.client != client:
-                raise Exception("Vous ne pouvez supprimer que vos articles")
-            instance.delete()
-        except Exception as e:
-            logger.error(f"Erreur suppression panier: {str(e)}")
-            raise Exception(f"Erreur lors de la suppression: {str(e)}")
-    
+            logger.error(f"❌ Erreur ajout rapide panier: {str(e)}")
+            logger.error(f"❌ Traceback: {traceback.format_exc()}")
+            return Response(
+                {'error': f'Erreur lors de l\'ajout: {str(e)}', 'success': False}, 
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
     @action(detail=False, methods=['get'])
     def resume(self, request):
         """Récupère le résumé du panier"""
@@ -663,103 +788,6 @@ class PanierViewSet(viewsets.ModelViewSet):
             return Response(
                 {'error': 'Erreur lors du vidage du panier', 'success': False}, 
                 status=status.HTTP_400_BAD_REQUEST
-            )
-
-    @action(detail=False, methods=['post'])
-    def ajouter_rapide(self, request):
-        """Ajouter rapidement un produit avec sa spécification par défaut"""
-        try:
-            produit_id = request.data.get('produit_id')
-            quantite = request.data.get('quantite', 1)
-            
-            logger.info(f"Tentative ajout produit {produit_id}, quantité {quantite}")
-            
-            if not produit_id:
-                return Response(
-                    {'error': 'ID produit requis', 'success': False}, 
-                    status=status.HTTP_400_BAD_REQUEST
-                )
-            
-            client = DetailsClient.objects.first()
-            if not client:
-                return Response(
-                    {'error': 'Aucun client trouvé dans la base de données', 'success': False}, 
-                    status=status.HTTP_400_BAD_REQUEST
-                )
-            
-            logger.info(f"Client trouvé: {client.nom} {client.prenom} (ID: {client.id})")
-            
-            # Trouver la spécification par défaut du produit
-            specification = SpecificationProduit.objects.filter(
-                produit_id=produit_id, 
-                est_defaut=True
-            ).first()
-            
-            if not specification:
-                specification = SpecificationProduit.objects.filter(
-                    produit_id=produit_id
-                ).first()
-            
-            if not specification:
-                return Response(
-                    {'error': f'Aucune spécification trouvée pour le produit {produit_id}', 'success': False}, 
-                    status=status.HTTP_400_BAD_REQUEST
-                )
-            
-            logger.info(f"Spécification trouvée: {specification.nom} (ID: {specification.id})")
-            
-            panier_existant = Panier.objects.filter(
-                client=client, 
-                specification=specification
-            ).first()
-            
-            if panier_existant:
-                nouvelle_quantite = panier_existant.quantite + quantite
-                
-                if nouvelle_quantite > specification.quantite_stock:
-                    return Response(
-                        {
-                            'error': f'Stock insuffisant. Disponible: {specification.quantite_stock}, déjà dans panier: {panier_existant.quantite}', 
-                            'success': False
-                        }, 
-                        status=status.HTTP_400_BAD_REQUEST
-                    )
-                
-                panier_existant.quantite = nouvelle_quantite
-                panier_existant.save()
-                instance = panier_existant
-                logger.info(f"Quantité mise à jour: {instance.quantite}")
-            else:
-                if quantite > specification.quantite_stock:
-                    return Response(
-                        {
-                            'error': f'Quantité demandée ({quantite}) supérieure au stock disponible ({specification.quantite_stock})', 
-                            'success': False
-                        }, 
-                        status=status.HTTP_400_BAD_REQUEST
-                    )
-                
-                instance = Panier.objects.create(
-                    client=client,
-                    specification=specification,
-                    quantite=quantite
-                )
-                logger.info(f"Nouvel article créé: {instance.id}")
-            
-            return Response(
-                {
-                    'message': 'Produit ajouté au panier avec succès', 
-                    'success': True,
-                    'item': PanierSerializer(instance).data
-                },
-                status=status.HTTP_201_CREATED
-            )
-                
-        except Exception as e:
-            logger.error(f"Erreur ajout rapide panier: {str(e)}")
-            return Response(
-                {'error': f'Erreur lors de l\'ajout: {str(e)}', 'success': False}, 
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
 # ===========================
@@ -1457,62 +1485,202 @@ class DetailCommandeViewSet(viewsets.ModelViewSet):
     permission_classes = [AllowAny]
 
 class FavoriViewSet(viewsets.ModelViewSet):
-    """ViewSet pour la gestion des favoris"""
+    """ViewSet pour la gestion des favoris - VERSION DEBUG"""
     serializer_class = FavoriSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [AllowAny]  # ⚠️ TEMPORAIRE - pour tests uniquement
     
     def get_queryset(self):
+        """Récupérer les favoris du premier client disponible"""
         try:
-            client = self.request.user.detailsclient
-            return Favori.objects.filter(client=client).select_related(
+            # TEMPORAIRE: utiliser le premier client pour les tests
+            client = DetailsClient.objects.first()
+            if not client:
+                logger.warning("❌ Aucun client trouvé dans get_queryset")
+                return Favori.objects.none()
+            
+            queryset = Favori.objects.filter(client=client).select_related(
                 'produit', 'produit__categorie'
             ).prefetch_related('produit__imageproduit_set')
-        except:
+            
+            logger.info(f"✅ get_queryset: {queryset.count()} favoris trouvés pour client {client.id}")
+            return queryset
+            
+        except Exception as e:
+            logger.error(f"❌ Erreur get_queryset favoris: {str(e)}")
+            logger.error(f"Traceback: {traceback.format_exc()}")
             return Favori.objects.none()
     
     def perform_create(self, serializer):
+        """Ajouter un favori"""
         try:
-            client = self.request.user.detailsclient
+            # TEMPORAIRE: utiliser le premier client
+            client = self.get_or_create_test_client()
+            
             produit = serializer.validated_data['produit']
+            logger.info(f"🔄 Tentative d'ajout favori: client={client.id}, produit={produit.id}")
             
+            # Vérifier si déjà en favoris
             if Favori.objects.filter(client=client, produit=produit).exists():
-                raise serializers.ValidationError("Produit déjà dans les favoris")
+                logger.warning(f"⚠️ Produit {produit.id} déjà en favoris pour client {client.id}")
+                raise Exception("Produit déjà dans les favoris")
             
-            serializer.save(client=client)
+            # Sauvegarder
+            favori = serializer.save(client=client)
+            logger.info(f"✅ Favori créé avec succès: ID={favori.id}")
+            
         except Exception as e:
-            raise serializers.ValidationError(str(e))
+            logger.error(f"❌ Erreur ajout favori: {str(e)}")
+            logger.error(f"Traceback: {traceback.format_exc()}")
+            raise Exception(f"Erreur lors de l'ajout aux favoris: {str(e)}")
+    
+    def get_or_create_test_client(self):
+        """Obtenir ou créer un client pour les tests"""
+        # Essayer de récupérer le premier client
+        client = DetailsClient.objects.first()
+        
+        if client:
+            logger.info(f"✅ Client existant trouvé: {client.id}")
+            return client
+        
+        # Créer un client temporaire
+        logger.warning("⚠️ Aucun client trouvé, création d'un client temporaire")
+        
+        utilisateur = Utilisateur.objects.first()
+        if not utilisateur:
+            logger.error("❌ Aucun utilisateur disponible pour créer un client")
+            raise Exception("Aucun utilisateur disponible")
+        
+        client = DetailsClient.objects.create(
+            utilisateur=utilisateur,
+            nom="Client",
+            prenom="Test",
+            adresse="Adresse test",
+            ville="Nouakchott",
+            code_postal="00000",
+            pays="Mauritanie"
+        )
+        logger.info(f"✅ Client temporaire créé: {client.id}")
+        return client
     
     @action(detail=False, methods=['post'])
     def toggle(self, request):
-        """Ajouter/retirer un produit des favoris"""
-        produit_id = request.data.get('produit_id')
-        if not produit_id:
-            return Response(
-                {'error': 'produit_id requis'}, 
-                status=status.HTTP_400_BAD_REQUEST
-            )
+        """Toggle favori avec debug complet"""
+        logger.info(f"🔄 [TOGGLE] Début - Data reçue: {request.data}")
         
         try:
-            client = request.user.detailsclient
-            produit = Produit.objects.get(id=produit_id)
+            # 1. Validation des données d'entrée
+            produit_id = request.data.get('produit_id')
+            if not produit_id:
+                logger.error("❌ [TOGGLE] produit_id manquant")
+                return Response(
+                    {'error': 'produit_id requis', 'success': False}, 
+                    status=status.HTTP_400_BAD_REQUEST
+                )
             
-            favori = Favori.objects.filter(client=client, produit=produit).first()
-            if favori:
-                favori.delete()
-                return Response({'message': 'Retiré des favoris', 'is_favori': False})
-            else:
-                Favori.objects.create(client=client, produit=produit)
-                return Response({'message': 'Ajouté aux favoris', 'is_favori': True})
+            logger.info(f"🔍 [TOGGLE] Produit ID reçu: {produit_id} (type: {type(produit_id)})")
+            
+            # 2. Vérifier si le produit existe
+            try:
+                produit = Produit.objects.get(id=produit_id)
+                logger.info(f"✅ [TOGGLE] Produit trouvé: {produit.nom} (ID: {produit.id})")
+            except Produit.DoesNotExist:
+                logger.error(f"❌ [TOGGLE] Produit {produit_id} non trouvé")
+                return Response(
+                    {'error': 'Produit non trouvé', 'success': False}, 
+                    status=status.HTTP_404_NOT_FOUND
+                )
+            
+            # 3. Obtenir ou créer le client
+            try:
+                client = self.get_or_create_test_client()
+                logger.info(f"✅ [TOGGLE] Client obtenu: {client.id}")
+            except Exception as e:
+                logger.error(f"❌ [TOGGLE] Erreur client: {str(e)}")
+                return Response(
+                    {'error': f'Erreur client: {str(e)}', 'success': False}, 
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            # 4. Toggle logic avec transaction
+            with transaction.atomic():
+                favori = Favori.objects.filter(client=client, produit=produit).first()
                 
-        except Produit.DoesNotExist:
-            return Response(
-                {'error': 'Produit non trouvé'}, 
-                status=status.HTTP_404_NOT_FOUND
-            )
+                if favori:
+                    # Retirer des favoris
+                    logger.info(f"🗑️ [TOGGLE] Suppression favori ID: {favori.id}")
+                    favori.delete()
+                    message = 'Retiré des favoris'
+                    is_favori = False
+                    
+                else:
+                    # Ajouter aux favoris
+                    logger.info(f"➕ [TOGGLE] Création nouveau favori")
+                    favori = Favori.objects.create(client=client, produit=produit)
+                    logger.info(f"✅ [TOGGLE] Favori créé avec ID: {favori.id}")
+                    message = 'Ajouté aux favoris'
+                    is_favori = True
+            
+            # 5. Vérification post-toggle
+            favori_count = Favori.objects.filter(client=client).count()
+            logger.info(f"📊 [TOGGLE] Total favoris pour client {client.id}: {favori_count}")
+            
+            # 6. Réponse de succès
+            response_data = {
+                'message': message,
+                'is_favori': is_favori,
+                'success': True,
+                'debug_info': {  # Informations de debug
+                    'client_id': client.id,
+                    'produit_id': produit.id,
+                    'total_favoris': favori_count
+                }
+            }
+            
+            logger.info(f"✅ [TOGGLE] Succès: {response_data}")
+            return Response(response_data, status=status.HTTP_200_OK)
+            
         except Exception as e:
+            logger.error(f"❌ [TOGGLE] Erreur inattendue: {str(e)}")
+            logger.error(f"Traceback: {traceback.format_exc()}")
+            
             return Response(
-                {'error': str(e)}, 
-                status=status.HTTP_400_BAD_REQUEST
+                {
+                    'error': f'Erreur serveur: {str(e)}', 
+                    'success': False,
+                    'debug_info': {
+                        'error_type': type(e).__name__,
+                        'error_details': str(e)
+                    }
+                }, 
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+    def list(self, request, *args, **kwargs):
+        """Override list pour debug"""
+        logger.info("🔍 [LIST] Début de list favoris")
+        
+        try:
+            queryset = self.get_queryset()
+            logger.info(f"✅ [LIST] Queryset obtenu: {queryset.count()} éléments")
+            
+            serializer = self.get_serializer(queryset, many=True)
+            logger.info(f"✅ [LIST] Sérialisation terminée")
+            
+            response_data = {
+                'count': queryset.count(),
+                'results': serializer.data
+            }
+            
+            logger.info(f"✅ [LIST] Réponse prête: {len(serializer.data)} favoris")
+            return Response(response_data)
+            
+        except Exception as e:
+            logger.error(f"❌ [LIST] Erreur: {str(e)}")
+            logger.error(f"Traceback: {traceback.format_exc()}")
+            
+            return Response(
+                {'error': f'Erreur lors du chargement: {str(e)}', 'results': []},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
 class AvisViewSet(viewsets.ModelViewSet):

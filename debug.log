@@ -4,3 +4,50 @@ INFO 2025-07-09 00:05:35,307 views 10848 12192 Tentative ajout produit 34, quant
 INFO 2025-07-09 00:23:31,037 views 10848 16280 Tentative ajout produit 34, quantité 1
 INFO 2025-07-09 23:10:28,082 views 20384 12680 Tentative ajout produit 37, quantité 1
 INFO 2025-07-09 23:12:26,655 views 20384 12680 Tentative ajout produit 34, quantité 1
+INFO 2025-07-12 16:28:47,096 views 23564 3520 Tentative ajout produit 41, quantité 1
+INFO 2025-07-13 01:17:17,444 views 17120 15304 Produit trouvé: Chaussures Adidas UltraBoost
+INFO 2025-07-13 01:17:17,529 views 17120 15304 Client temporaire créé: Client Temporaire (ID: 1)
+INFO 2025-07-13 01:17:17,530 views 17120 15304 Client trouvé/créé: Client Temporaire (ID: 1)
+INFO 2025-07-13 01:17:17,533 views 17120 15304 Spécification trouvée: test (ID: 8, Stock: 14)
+INFO 2025-07-13 01:17:17,545 views 17120 15304 Nouvel article créé: 1
+INFO 2025-07-13 01:59:21,969 views 17120 9188 Produit trouvé: Chaussures Adidas UltraBoost
+INFO 2025-07-13 01:59:21,974 views 17120 9188 Client trouvé/créé: Client Temporaire (ID: 1)
+INFO 2025-07-13 01:59:21,979 views 17120 9188 Spécification trouvée: test (ID: 8, Stock: 14)
+INFO 2025-07-13 01:59:22,019 views 17120 9188 Quantité mise à jour: 4
+INFO 2025-07-13 15:07:51,719 views 18648 7836 Produit trouvé: T-shirt Nike Dri-FIT
+INFO 2025-07-13 15:07:51,740 views 18648 7836 Client trouvé/créé: Client Temporaire (ID: 1)
+INFO 2025-07-13 15:07:51,742 views 18648 7836 Spécification trouvée: nike (ID: 7, Stock: 14)
+INFO 2025-07-13 15:07:51,777 views 18648 7836 Nouvel article créé: 2
+INFO 2025-07-13 16:24:02,379 views 10068 26524 Produit 34 ajouté aux favoris pour client 1
+INFO 2025-07-13 16:24:02,407 views 10068 26524 Produit 34 retiré des favoris pour client 1
+INFO 2025-07-13 16:24:50,281 views 10068 11580 Produit 34 ajouté aux favoris pour client 1
+INFO 2025-07-13 16:24:50,303 views 10068 11580 Produit 34 retiré des favoris pour client 1
+INFO 2025-07-13 16:25:09,635 views 10068 11580 Produit 36 ajouté aux favoris pour client 1
+INFO 2025-07-13 16:25:09,656 views 10068 11580 Produit 36 retiré des favoris pour client 1
+INFO 2025-07-13 16:46:05,912 views 10068 13940 Produit 34 ajouté aux favoris pour client 1
+INFO 2025-07-13 16:46:05,937 views 10068 13940 Produit 34 retiré des favoris pour client 1
+INFO 2025-07-13 16:49:18,165 views 10068 13940 Produit 41 ajouté aux favoris pour client 1
+INFO 2025-07-13 16:49:18,185 views 10068 13940 Produit 41 retiré des favoris pour client 1
+INFO 2025-07-13 16:55:29,620 views 10068 32676 Produit 34 ajouté aux favoris pour client 1
+INFO 2025-07-13 16:55:29,673 views 10068 32676 Produit 34 retiré des favoris pour client 1
+INFO 2025-07-13 16:56:00,377 views 10068 32676 Produit 34 ajouté aux favoris pour client 1
+INFO 2025-07-13 16:56:00,466 views 10068 32676 Produit 34 retiré des favoris pour client 1
+INFO 2025-07-13 16:56:37,366 views 10068 32676 Produit 34 ajouté aux favoris pour client 1
+INFO 2025-07-13 16:56:37,483 views 10068 32676 Produit 34 retiré des favoris pour client 1
+INFO 2025-07-13 16:57:29,881 views 10068 32676 Produit 41 ajouté aux favoris pour client 1
+INFO 2025-07-13 16:57:30,005 views 10068 32676 Produit 41 retiré des favoris pour client 1
+INFO 2025-07-13 16:58:22,920 views 10068 32676 Produit 35 ajouté aux favoris pour client 1
+INFO 2025-07-13 16:58:22,982 views 10068 32676 Produit 35 retiré des favoris pour client 1
+INFO 2025-07-13 17:08:45,743 views 10068 18392 Produit 39 ajouté aux favoris pour client 1
+INFO 2025-07-13 17:08:45,838 views 10068 18392 Produit 39 retiré des favoris pour client 1
+INFO 2025-07-13 17:08:54,219 views 10068 18392 Produit 34 ajouté aux favoris pour client 1
+INFO 2025-07-13 17:08:54,272 views 10068 18392 Produit 34 retiré des favoris pour client 1
+INFO 2025-07-13 17:12:52,039 views 10068 17292 Produit 34 ajouté aux favoris pour client 1
+INFO 2025-07-13 17:12:52,125 views 10068 17292 Produit 34 retiré des favoris pour client 1
+INFO 2025-07-13 20:33:39,710 views 31496 10364 Produit trouvé: test
+INFO 2025-07-13 20:33:39,715 views 31496 10364 Client trouvé/créé: Client Temporaire (ID: 1)
+INFO 2025-07-13 20:33:39,717 views 31496 10364 Spécification trouvée: spe (ID: 19, Stock: 3)
+INFO 2025-07-13 21:09:58,535 views 31496 14196 Produit trouvé: Chaussures Adidas UltraBoost
+INFO 2025-07-13 21:09:58,539 views 31496 14196 Client trouvé/créé: Client Temporaire (ID: 1)
+INFO 2025-07-13 21:09:58,544 views 31496 14196 Spécification trouvée: test (ID: 8, Stock: 14)
+INFO 2025-07-13 21:09:58,556 views 31496 14196 Nouvel article créé: 3
