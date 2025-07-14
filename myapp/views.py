@@ -146,18 +146,43 @@ class RequestPasswordResetView(APIView):
         # Créer un token
         token_obj = PasswordResetToken.objects.create(utilisateur=utilisateur)
 
-        # Construire URL de reset
-        reset_url = f"https://localhost:5173/reset-password/{token_obj.token}"
-
-        # Envoyer email
+        # AMÉLIORATION : Lien générique qui fonctionne pour tous les frontends
+        # Au lieu de pointer vers un frontend spécifique, on donne juste le token
+        
+        # Option 1: Email avec instructions pour utiliser le token
+        email_content = f"""
+        Bonjour,
+        
+        Vous avez demandé la réinitialisation de votre mot de passe.
+        
+        Votre code de réinitialisation est : {token_obj.token}
+        
+        Pour réinitialiser votre mot de passe :
+        - Sur mobile : Ouvrez l'application Ishrili, allez dans "Mot de passe oublié" et saisissez ce code
+        - Sur web : Allez sur https://ishrili.com/reset-password et saisissez ce code
+        
+        Ce code expire dans 1 heure.
+        
+        Si vous n'avez pas demandé cette réinitialisation, ignorez cet email.
+        
+        L'équipe Ishrili
+        """
+        
+        # Option 2: Email avec lien universel (pour le futur)
+        # reset_url = f"https://ishrili.com/reset-password?token={token_obj.token}"
+        
+        # Envoyer email avec le contenu adaptatif
         send_mail(
-            "Réinitialisation du mot de passe",
-            f"Pour réinitialiser votre mot de passe, cliquez sur ce lien : {reset_url}",
-            "no-reply@tonapp.com",
+            "Réinitialisation du mot de passe - Ishrili",
+            email_content,
+            "no-reply@ishrili.com",
             [email],
         )
 
-        return Response({"message": "Email envoyé si compte existant"}, status=200)
+        return Response({
+            "message": "Email envoyé si compte existant", 
+            "token": str(token_obj.token)  # AJOUT : Retourner aussi le token pour debug/test
+        }, status=200)
 
 class ResetPasswordView(APIView):
     permission_classes = [AllowAny]
