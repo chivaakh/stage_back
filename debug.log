@@ -4,3 +4,53 @@ INFO 2025-07-09 00:05:35,307 views 10848 12192 Tentative ajout produit 34, quant
 INFO 2025-07-09 00:23:31,037 views 10848 16280 Tentative ajout produit 34, quantité 1
 INFO 2025-07-09 23:10:28,082 views 20384 12680 Tentative ajout produit 37, quantité 1
 INFO 2025-07-09 23:12:26,655 views 20384 12680 Tentative ajout produit 34, quantité 1
+ERROR 2025-07-12 02:33:15,401 views 8288 21344 Erreur modération produit 1: Cannot resolve keyword 'date_creation' into field. Choices are: avis, categorie, categorie_id, commercant, commercant_id, date_moderation, derniere_verification, description, est_approuve, est_visible, evaluations_qualite, favori, historique_moderation, id, imageproduit, moderateur, moderateur_id, nom, notification, raison_rejet, reference, score_qualite, signalements, specificationproduit, statut_moderation
+ERROR 2025-07-12 02:40:05,692 views 9064 18440 Erreur modération produit 1: No Produit matches the given query.
+ERROR 2025-07-12 14:10:19,711 views 18288 11296 Erreur modération produit 41: name 'ModerationActionSerializer' is not defined
+ERROR 2025-07-12 14:10:19,758 views 18288 4808 Erreur modération produit 41: name 'ModerationActionSerializer' is not defined
+ERROR 2025-07-12 14:10:19,775 views 18288 12756 Erreur modération produit 39: name 'ModerationActionSerializer' is not defined
+ERROR 2025-07-12 14:10:19,791 views 18288 8916 Erreur modération produit 38: name 'ModerationActionSerializer' is not defined
+ERROR 2025-07-12 14:26:16,898 views 1704 17480 Erreur dans list: Field name `images` is not valid for model `Produit` in `myapp.serializers.ProduitSerializer`.
+ERROR 2025-07-12 14:27:34,844 views 1704 936 Erreur dans list: Field name `images` is not valid for model `Produit` in `myapp.serializers.ProduitSerializer`.
+ERROR 2025-07-12 14:28:00,524 views 1704 16908 Erreur dans list: Field name `images` is not valid for model `Produit` in `myapp.serializers.ProduitSerializer`.
+ERROR 2025-07-12 14:28:00,669 views 1704 4796 Erreur dans list: Field name `images` is not valid for model `Produit` in `myapp.serializers.ProduitSerializer`.
+ERROR 2025-07-12 14:28:00,684 views 1704 11984 Erreur dans list: Field name `images` is not valid for model `Produit` in `myapp.serializers.ProduitSerializer`.
+ERROR 2025-07-12 14:28:00,698 views 1704 4060 Erreur dans list: Field name `images` is not valid for model `Produit` in `myapp.serializers.ProduitSerializer`.
+ERROR 2025-07-12 14:28:00,716 views 1704 12400 Erreur dans list: Field name `images` is not valid for model `Produit` in `myapp.serializers.ProduitSerializer`.
+ERROR 2025-07-12 14:30:02,302 views 1704 3884 Erreur dans list: Field name `images` is not valid for model `Produit` in `myapp.serializers.ProduitSerializer`.
+ERROR 2025-07-12 14:33:22,399 views 2128 7244 Erreur dans list: Field name `images` is not valid for model `Produit` in `myapp.serializers.ProduitSerializer`.
+ERROR 2025-07-12 14:33:23,432 views 2128 7244 Erreur dans list: Field name `images` is not valid for model `Produit` in `myapp.serializers.ProduitSerializer`.
+ERROR 2025-07-12 14:33:26,608 views 2128 7244 Erreur dans list: Field name `images` is not valid for model `Produit` in `myapp.serializers.ProduitSerializer`.
+ERROR 2025-07-12 14:33:31,836 views 2128 15884 Erreur dans list: Field name `images` is not valid for model `Produit` in `myapp.serializers.ProduitSerializer`.
+ERROR 2025-07-12 14:50:59,841 views 3976 18516 Erreur dans list: Field name `images` is not valid for model `Produit` in `myapp.serializers.ProduitSerializer`.
+ERROR 2025-07-12 14:51:17,565 views 3976 7680 Erreur dans list: Field name `images` is not valid for model `Produit` in `myapp.serializers.ProduitSerializer`.
+ERROR 2025-07-12 14:51:18,326 views 3976 7680 Erreur dans list: Field name `images` is not valid for model `Produit` in `myapp.serializers.ProduitSerializer`.
+ERROR 2025-07-12 14:51:18,595 views 3976 7680 Erreur dans list: Field name `images` is not valid for model `Produit` in `myapp.serializers.ProduitSerializer`.
+ERROR 2025-07-12 14:51:18,837 views 3976 7680 Erreur dans list: Field name `images` is not valid for model `Produit` in `myapp.serializers.ProduitSerializer`.
+ERROR 2025-07-12 14:51:19,024 views 3976 7680 Erreur dans list: Field name `images` is not valid for model `Produit` in `myapp.serializers.ProduitSerializer`.
+ERROR 2025-07-12 14:51:19,236 views 3976 7680 Erreur dans list: Field name `images` is not valid for model `Produit` in `myapp.serializers.ProduitSerializer`.
+ERROR 2025-07-12 14:59:49,341 views 3976 19324 Erreur dans list: Field name `images` is not valid for model `Produit` in `myapp.serializers.ProduitSerializer`.
+ERROR 2025-07-12 15:01:59,842 views 21024 2320 Erreur dans list: Field name `images` is not valid for model `Produit` in `myapp.serializers.ProduitSerializer`.
+ERROR 2025-07-12 15:06:08,017 views 17712 5464 Erreur dans list: Field name `images` is not valid for model `Produit` in `myapp.serializers.ProduitSerializer`.
+ERROR 2025-07-12 15:06:08,575 views 17712 5464 Erreur dans list: Field name `images` is not valid for model `Produit` in `myapp.serializers.ProduitSerializer`.
+ERROR 2025-07-12 15:06:23,082 views 13400 18328 Erreur dans list: Field name `images` is not valid for model `Produit` in `myapp.serializers.ProduitSerializer`.
+ERROR 2025-07-12 15:07:23,731 views 22204 14488 Erreur dans list: Field name `images` is not valid for model `Produit` in `myapp.serializers.ProduitSerializer`.
+ERROR 2025-07-12 15:07:24,380 views 22204 14488 Erreur dans list: Field name `images` is not valid for model `Produit` in `myapp.serializers.ProduitSerializer`.
+ERROR 2025-07-12 15:07:24,540 views 22204 14488 Erreur dans list: Field name `images` is not valid for model `Produit` in `myapp.serializers.ProduitSerializer`.
+ERROR 2025-07-12 15:07:34,904 views 22204 4012 Erreur dans list: Field name `images` is not valid for model `Produit` in `myapp.serializers.ProduitSerializer`.
+ERROR 2025-07-12 15:11:56,900 views 20484 7852 Erreur dans list: Field name `images` is not valid for model `Produit` in `myapp.serializers.ProduitSerializer`.
+ERROR 2025-07-12 15:57:08,534 views 20484 14904 Erreur dans list: Field name `images` is not valid for model `Produit` in `myapp.serializers.ProduitSerializer`.
+ERROR 2025-07-12 15:57:09,210 views 20484 14904 Erreur dans list: Field name `images` is not valid for model `Produit` in `myapp.serializers.ProduitSerializer`.
+ERROR 2025-07-12 15:57:09,411 views 20484 14904 Erreur dans list: Field name `images` is not valid for model `Produit` in `myapp.serializers.ProduitSerializer`.
+ERROR 2025-07-12 15:57:09,671 views 20484 14904 Erreur dans list: Field name `images` is not valid for model `Produit` in `myapp.serializers.ProduitSerializer`.
+ERROR 2025-07-12 15:57:09,909 views 20484 14904 Erreur dans list: Field name `images` is not valid for model `Produit` in `myapp.serializers.ProduitSerializer`.
+ERROR 2025-07-12 15:57:10,142 views 20484 14904 Erreur dans list: Field name `images` is not valid for model `Produit` in `myapp.serializers.ProduitSerializer`.
+ERROR 2025-07-12 15:57:10,374 views 20484 14904 Erreur dans list: Field name `images` is not valid for model `Produit` in `myapp.serializers.ProduitSerializer`.
+ERROR 2025-07-12 16:07:20,815 views 20484 20012 Erreur dans list: Field name `images` is not valid for model `Produit` in `myapp.serializers.ProduitSerializer`.
+ERROR 2025-07-12 16:07:20,871 views 20484 20012 Erreur dans list: Field name `images` is not valid for model `Produit` in `myapp.serializers.ProduitSerializer`.
+ERROR 2025-07-12 16:09:35,559 views 20484 2120 Erreur dans list: Field name `images` is not valid for model `Produit` in `myapp.serializers.ProduitSerializer`.
+ERROR 2025-07-12 16:09:35,604 views 20484 2120 Erreur dans list: Field name `images` is not valid for model `Produit` in `myapp.serializers.ProduitSerializer`.
+ERROR 2025-07-12 16:09:35,827 views 20484 20012 Erreur dans list: Field name `images` is not valid for model `Produit` in `myapp.serializers.ProduitSerializer`.
+ERROR 2025-07-12 16:12:09,021 views 20484 2120 Erreur dans list: Field name `images` is not valid for model `Produit` in `myapp.serializers.ProduitSerializer`.
+ERROR 2025-07-12 16:12:09,070 views 20484 2120 Erreur dans list: Field name `images` is not valid for model `Produit` in `myapp.serializers.ProduitSerializer`.
+ERROR 2025-07-12 16:12:09,266 views 20484 20012 Erreur dans list: Field name `images` is not valid for model `Produit` in `myapp.serializers.ProduitSerializer`.

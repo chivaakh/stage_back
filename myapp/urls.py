@@ -2,7 +2,7 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from .views import (
-    CreerProfilVendeurView, ProduitViewSet, ImageProduitViewSet, SignupView, SpecificationProduitViewSet,
+    AdminBoutiquesViewSet, AdminNotificationViewSet, CampaignViewSet, CreerProfilVendeurView, ProduitViewSet, ImageProduitViewSet, SignupView, SpecificationProduitViewSet,
     MouvementStockViewSet, CategorieViewSet, NotificationViewSet,
     ClientProduitViewSet, ClientCategorieViewSet, 
     PanierViewSet,
@@ -11,7 +11,9 @@ from .views import (
     # API Views - Supprimé SignupView qui n'existe pas
     LoginView,
     RequestPasswordResetView, ResetPasswordView,
-    GoogleLoginView, FacebookLoginView, VendeurInfoView,
+    GoogleLoginView, FacebookLoginView, SystemAlertViewSet, VendeurInfoView,AdminUsersViewSet, admin_boutiques_stats, admin_stats, admin_recent_activity,ModerationProduitViewSet, SignalementProduitViewSet,
+    EvaluationQualiteViewSet, CritereQualiteViewSet,
+    DashboardModerationView,
     # Functions
     upload_image, debug_products, debug_images_complete,
 )
@@ -30,6 +32,23 @@ router.register(r'client/avis', AvisViewSet, basename='avis')
 router.register(r'client/commandes', ClientCommandeViewSet, basename='client-commandes')
 router.register(r'client/profil', ClientProfilViewSet, basename='client-profil')
 
+# admin 
+router.register(r'admin/users', AdminUsersViewSet, basename='admin-users')
+router.register(r'admin/boutiques', AdminBoutiquesViewSet, basename='admin-boutiques')
+router.register(r'admin/moderation/produits', ModerationProduitViewSet, basename='moderation-produits')
+router.register(r'admin/signalements', SignalementProduitViewSet, basename='signalements')
+router.register(r'admin/evaluations-qualite', EvaluationQualiteViewSet, basename='evaluations-qualite')
+router.register(r'admin/criteres-qualite', CritereQualiteViewSet, basename='criteres-qualite')
+# dayertu wethi9a
+router.register(r'client/signalements', SignalementProduitViewSet, basename='client-signalements')
+# notification admin 
+router.register(r'admin/notifications', AdminNotificationViewSet, basename='admin-notifications')
+router.register(r'campaigns', CampaignViewSet, basename='campaigns')
+router.register(r'alerts', SystemAlertViewSet, basename='alerts')
+
+
+
+
 # Admin or shared routes
 router.register(r'produits', ProduitViewSet, basename='produit')
 router.register(r'images', ImageProduitViewSet, basename='image')
@@ -39,7 +58,6 @@ router.register(r'categories', CategorieViewSet, basename='categorie')
 router.register(r'commandes', CommandeViewSet, basename='commandes')  #  important pour /commandes/<id>/tracking/
 router.register(r'detail-commandes', DetailCommandeViewSet)
 router.register(r'notifications', NotificationViewSet, basename='notification')
-
 urlpatterns = [
     # Router URLs
     path('', include(router.urls)),
@@ -54,7 +72,11 @@ urlpatterns = [
     path('api/vendeur-info/', VendeurInfoView.as_view(), name='vendeur_info'),
     path('upload-image/', upload_image, name='upload-image'),
 
-
+# admin
+    path('api/admin/stats/', admin_stats, name='admin-stats'),
+    path('api/admin/activity/', admin_recent_activity, name='admin-activity'),
+    path('api/admin/boutiques/stats/', admin_boutiques_stats, name='admin-boutiques-stats'),
+    path('admin/dashboard-moderation/', DashboardModerationView.as_view(), name='dashboard-moderation'),
 
     # Utility URLs
     path('upload-image/', upload_image, name='upload-image'),

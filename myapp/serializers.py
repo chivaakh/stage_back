@@ -1,13 +1,17 @@
 # serializers.py - VERSION CORRIGÉE AVEC BON ORDRE
-
+import logging
+logger = logging.getLogger(__name__)
 from rest_framework import serializers
 from django.contrib.auth.hashers import make_password
 from .models import (
-    Produit, ImageProduit, SpecificationProduit, 
+    Campaign, Produit, ImageProduit, SpecificationProduit, SystemAlert, 
     Utilisateur, ProfilVendeur, DetailsClient, DetailsCommercant,
     Categorie, Notification, Commande, DetailCommande, 
     TrackingCommande, Avis, Panier, Favori, MouvementStock
 )
+from . import models
+from dateutil import parser
+from django.utils import timezone
 
 # ===== 1. SERIALIZERS DE BASE (D'ABORD LES PLUS SIMPLES) =====
 
@@ -74,6 +78,193 @@ class SpecificationProduitSerializer(serializers.ModelSerializer):
 
 # ===== 2. SERIALIZER PRODUIT PRINCIPAL (MAINTENANT QU'ON A CATÉGORIE) =====
 
+# class ProduitSerializer(serializers.ModelSerializer):
+#     """Serializer principal pour les produits"""
+#     # images = ImageProduitSerializer(many=True, read_only=True, source='imageproduit_set')
+#     images = serializers.SerializerMethodField()
+#     specifications = SpecificationProduitSerializer(many=True, read_only=True, source='specificationproduit_set')
+    
+#     # ✅ MAINTENANT CategorieSerializer EST DÉFINI
+#     categorie = CategorieSerializer(read_only=True)
+#     categorie_id = serializers.IntegerField(write_only=True, required=False, allow_null=True)
+    
+#     # ✅ CHAMPS CALCULÉS SÉCURISÉS
+#     prix_min = serializers.SerializerMethodField()
+#     prix_max = serializers.SerializerMethodField()
+#     stock_total = serializers.SerializerMethodField()
+#     image_principale = serializers.SerializerMethodField()
+    
+#     class Meta:
+#         model = Produit
+#         fields = [
+#             'id', 'nom', 'description', 'reference', 'commercant',
+#             'categorie', 'categorie_id', 
+#             'images', 'specifications',
+#             'prix_min', 'prix_max', 'stock_total', 'image_principale'
+#         ]
+#         extra_kwargs = {
+#             'commercant': {'required': False, 'allow_null': True},
+#         }
+#     # (wethi9a) ilyn y5assar 3lik m7ih w redii cha9eltk 4i li mcomentye
+
+#     # def get_prix_min(self, obj):
+#     #     """Prix minimum parmi toutes les spécifications"""
+#     #     try:
+#     #         specs = obj.specificationproduit_set.all()
+#     #         if specs:
+#     #             prix_list = [spec.prix_promo if spec.prix_promo else spec.prix for spec in specs]
+#     #             return float(min(prix_list)) if prix_list else 0
+#     #         return 0
+#     #     except:
+#     #         return 0
+    
+#     # def get_prix_max(self, obj):
+#     #     """Prix maximum parmi toutes les spécifications"""
+#     #     try:
+#     #         specs = obj.specificationproduit_set.all()
+#     #         if specs:
+#     #             prix_list = [spec.prix_promo if spec.prix_promo else spec.prix for spec in specs]
+#     #             return float(max(prix_list)) if prix_list else 0
+#     #         return 0
+#     #     except:
+#     #         return 0
+    
+#     # def get_stock_total(self, obj):
+#     #     """Stock total de toutes les spécifications"""
+#     #     try:
+#     #         specs = obj.specificationproduit_set.all()
+#     #         return sum(spec.quantite_stock for spec in specs)
+#     #     except:
+#     #         return 0
+    
+#     # def get_image_principale(self, obj):
+#     #     """Image principale du produit"""
+#     #     try:
+#     #         image_principale = obj.imageproduit_set.filter(est_principale=True).first()
+#     #         if image_principale:
+#     #             return {
+#     #                 'id': image_principale.id,
+#     #                 'url_image': image_principale.url_image,
+#     #                 'ordre': image_principale.ordre
+#     #             }
+#     #         # Si pas d'image principale, prendre la première
+#     #         premiere_image = obj.imageproduit_set.first()
+#     #         if premiere_image:
+#     #             return {
+#     #                 'id': premiere_image.id,
+#     #                 'url_image': premiere_image.url_image,
+#     #                 'ordre': premiere_image.ordre
+#     #             }
+#     #         return None
+#     #     except:
+#     #         return None
+#     # CORRECTIONS SIMPLES pour serializers.py
+# # Remplacez SEULEMENT ces méthodes dans ProduitSerializer
+#     def get_images(self, obj):
+#         """Récupérer les images de façon sécurisée"""
+#         try:
+#             images = obj.imageproduit_set.all()
+#             return ImageProduitSerializer(images, many=True).data
+#         except:
+#             return []
+        
+#     def get_prix_min(self, obj):
+#         """Version qui ne plante jamais"""
+#         try:
+#             specs = obj.specificationproduit_set.all()
+#             if specs:
+#                 prix_list = []
+#                 for spec in specs:
+#                     if spec.prix:  # Vérification simple
+#                         prix = spec.prix_promo if spec.prix_promo else spec.prix
+#                         prix_list.append(float(prix))
+#                 return min(prix_list) if prix_list else 0
+#             return 0
+#         except:
+#             return 0
+
+#     def get_prix_max(self, obj):
+#         """Version qui ne plante jamais"""
+#         try:
+#             specs = obj.specificationproduit_set.all()
+#             if specs:
+#                 prix_list = []
+#                 for spec in specs:
+#                     if spec.prix:  # Vérification simple
+#                         prix = spec.prix_promo if spec.prix_promo else spec.prix
+#                         prix_list.append(float(prix))
+#                 return max(prix_list) if prix_list else 0
+#             return 0
+#         except:
+#             return 0
+
+#     def get_stock_total(self, obj):
+#         """Version qui ne plante jamais"""
+#         try:
+#             specs = obj.specificationproduit_set.all()
+#             total = 0
+#             for spec in specs:
+#                 if spec.quantite_stock:  # Vérification simple
+#                     total += spec.quantite_stock
+#             return total
+#         except:
+#             return 0
+
+#     def get_image_principale(self, obj):
+#         """Version qui ne plante jamais"""
+#         try:
+#             # Chercher image principale
+#             image = obj.imageproduit_set.filter(est_principale=True).first()
+#             if not image:
+#                 # Sinon prendre la première
+#                 image = obj.imageproduit_set.first()
+            
+#             if image:
+#                 return {
+#                     'id': image.id,
+#                     'url_image': image.url_image,
+#                     'ordre': getattr(image, 'ordre', 0)
+#                 }
+#             return None
+#         except:
+#             return None
+        
+#     def create(self, validated_data):
+#         """Créer un produit avec catégorie"""
+#         categorie_id = validated_data.pop('categorie_id', None)
+#         produit = Produit.objects.create(**validated_data)
+        
+#         if categorie_id:
+#             try:
+#                 categorie = Categorie.objects.get(id=categorie_id)
+#                 produit.categorie = categorie
+#                 produit.save()
+#             except Categorie.DoesNotExist:
+#                 pass
+        
+#         return produit
+    
+#     def update(self, instance, validated_data):
+#         """Mettre à jour un produit avec catégorie"""
+#         categorie_id = validated_data.pop('categorie_id', None)
+        
+#         for attr, value in validated_data.items():
+#             setattr(instance, attr, value)
+        
+#         if categorie_id is not None:
+#             try:
+#                 if categorie_id == '' or categorie_id is None:
+#                     instance.categorie = None
+#                 else:
+#                     categorie = Categorie.objects.get(id=categorie_id)
+#                     instance.categorie = categorie
+#             except Categorie.DoesNotExist:
+#                 pass
+        
+#         instance.save()
+#         return instance
+    
+
 class ProduitSerializer(serializers.ModelSerializer):
     """Serializer principal pour les produits"""
     images = ImageProduitSerializer(many=True, read_only=True, source='imageproduit_set')
@@ -89,18 +280,51 @@ class ProduitSerializer(serializers.ModelSerializer):
     stock_total = serializers.SerializerMethodField()
     image_principale = serializers.SerializerMethodField()
     
+    # ... vos champs existants ...
+    
+    # AJOUTS POUR LA MODÉRATION
+    statut_moderation_display = serializers.CharField(
+        source='get_statut_moderation_display', read_only=True
+    )
+    moderateur_nom = serializers.SerializerMethodField()
+    nombre_signalements_actifs = serializers.SerializerMethodField()
+    
     class Meta:
         model = Produit
         fields = [
+            # Vos champs existants
             'id', 'nom', 'description', 'reference', 'commercant',
             'categorie', 'categorie_id', 
             'images', 'specifications',
-            'prix_min', 'prix_max', 'stock_total', 'image_principale'
+            'prix_min', 'prix_max', 'stock_total', 'image_principale',
+            
+            # NOUVEAUX CHAMPS DE MODÉRATION
+            'est_approuve', 'statut_moderation', 'statut_moderation_display',
+            'date_moderation', 'moderateur', 'moderateur_nom',
+            'raison_rejet', 'est_visible', 'score_qualite',
+            'nombre_signalements_actifs'
         ]
         extra_kwargs = {
             'commercant': {'required': False, 'allow_null': True},
         }
     
+    
+    def get_moderateur_nom(self, obj):
+        try:
+            if obj.moderateur:
+                return f"{obj.moderateur.prenom or ''} {obj.moderateur.nom or ''}".strip()
+            return None
+        except:
+            return None
+    
+    def get_nombre_signalements_actifs(self, obj):
+        try:
+            return obj.signalements.filter(statut__in=['nouveau', 'en_cours']).count()
+        except:
+            return 0
+    
+
+        
     def get_prix_min(self, obj):
         """Prix minimum parmi toutes les spécifications"""
         try:
@@ -606,3 +830,395 @@ class ClientProduitSerializer(serializers.ModelSerializer):
             return 15  # Simulé pour l'instant
         except:
             return 0
+        
+# admin
+class AdminUserSerializer(serializers.ModelSerializer):
+    """Serializer pour afficher les utilisateurs côté admin"""
+    boutique_info = serializers.SerializerMethodField()
+    commandes_count = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = Utilisateur
+        fields = [
+            'id_utilisateur', 'telephone', 'email', 'nom', 'prenom',
+            'type_utilisateur', 'date_creation', 'date_modification',
+            'est_verifie', 'est_actif', 'boutique_info', 'commandes_count'
+        ]
+    
+    def get_boutique_info(self, obj):
+        """Informations de la boutique si c'est un vendeur"""
+        if obj.type_utilisateur == 'vendeur':
+            try:
+                profil = obj.profil_vendeur
+                return {
+                    'nom_boutique': profil.nom_boutique,
+                    'ville': profil.ville,
+                    'est_approuve': profil.est_approuve,
+                    'evaluation': float(profil.evaluation),
+                    'total_ventes': float(profil.total_ventes),
+                }
+            except:
+                return None
+        return None
+    
+    def get_commandes_count(self, obj):
+        """Nombre de commandes pour ce client"""
+        if obj.type_utilisateur == 'client':
+            try:
+                client = DetailsClient.objects.get(utilisateur=obj)
+                return Commande.objects.filter(client=client).count()
+            except:
+                return 0
+        return 0
+    
+class AdminBoutiqueSerializer(serializers.ModelSerializer):
+    # """Serializer pour afficher les boutiques côté admin"""
+    vendeur_nom = serializers.CharField(source='utilisateur.nom', read_only=True)
+    vendeur_prenom = serializers.CharField(source='utilisateur.prenom', read_only=True)
+    vendeur_telephone = serializers.CharField(source='utilisateur.telephone', read_only=True)
+    vendeur_email = serializers.CharField(source='utilisateur.email', read_only=True)
+    vendeur_actif = serializers.BooleanField(source='utilisateur.est_actif', read_only=True)
+    produits_count = serializers.SerializerMethodField()
+    commandes_count = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = ProfilVendeur
+        fields = [
+            'id', 'nom_boutique', 'description', 'ville', 'adresse',
+            'telephone_professionnel', 'est_approuve', 'total_ventes', 'evaluation',
+            'date_creation', 'date_modification',
+            'vendeur_nom', 'vendeur_prenom', 'vendeur_telephone', 'vendeur_email', 'vendeur_actif',
+            'produits_count', 'commandes_count'
+        ]
+    
+    def get_produits_count(self, obj):
+        """Nombre de produits de cette boutique"""
+        try:
+            # Adapter selon votre modèle - ici j'assume que les produits ont un champ commercant
+            return Produit.objects.filter(commercant=obj).count()
+        except:
+            return 0
+    
+    def get_commandes_count(self, obj):
+        """Nombre de commandes pour cette boutique"""
+        try:
+            # Adapter selon votre modèle
+            return 0  # À implémenter selon votre logique
+        except:
+            return 0
+
+# Ajouts aux serializers.py existants
+
+from rest_framework import serializers
+from .models import (
+    Produit, SignalementProduit, HistoriqueModerationProduit, 
+    CritereQualiteProduit, EvaluationQualiteProduit
+)
+
+# ===== SERIALIZERS DE MODÉRATION =====
+
+class SignalementProduitSerializer(serializers.ModelSerializer):
+    """Serializer pour afficher les signalements"""
+    produit_nom = serializers.CharField(source='produit.nom', read_only=True)
+    produit_reference = serializers.CharField(source='produit.reference', read_only=True)
+    signaleur_nom = serializers.SerializerMethodField()
+    moderateur_nom = serializers.SerializerMethodField()
+    type_signalement_display = serializers.CharField(source='get_type_signalement_display', read_only=True)
+    statut_display = serializers.CharField(source='get_statut_display', read_only=True)
+    
+    class Meta:
+        model = SignalementProduit
+        fields = [
+            'id', 'produit', 'produit_nom', 'produit_reference',
+            'signaleur', 'signaleur_nom', 'type_signalement', 'type_signalement_display',
+            'description', 'statut', 'statut_display', 'date_signalement',
+            'date_traitement', 'moderateur', 'moderateur_nom', 'action_prise'
+        ]
+        read_only_fields = ['date_signalement']
+    
+    def get_signaleur_nom(self, obj):
+        try:
+            return f"{obj.signaleur.prenom or ''} {obj.signaleur.nom or ''}".strip() or "Utilisateur"
+        except:
+            return "Utilisateur"
+    
+    def get_moderateur_nom(self, obj):
+        try:
+            if obj.moderateur:
+                return f"{obj.moderateur.prenom or ''} {obj.moderateur.nom or ''}".strip() or "Modérateur"
+            return None
+        except:
+            return None
+
+
+class SignalementProduitCreateSerializer(serializers.ModelSerializer):
+    """Serializer pour créer un signalement"""
+    
+    class Meta:
+        model = SignalementProduit
+        fields = ['produit', 'type_signalement', 'description']
+    
+    def validate_description(self, value):
+        if len(value.strip()) < 10:
+            raise serializers.ValidationError("La description doit contenir au moins 10 caractères")
+        return value.strip()
+
+
+class HistoriqueModerationSerializer(serializers.ModelSerializer):
+    """Serializer pour l'historique de modération"""
+    moderateur_nom = serializers.SerializerMethodField()
+    produit_nom = serializers.CharField(source='produit.nom', read_only=True)
+    
+    class Meta:
+        model = HistoriqueModerationProduit
+        fields = [
+            'id', 'produit', 'produit_nom', 'moderateur', 'moderateur_nom',
+            'action', 'ancien_statut', 'nouveau_statut', 'commentaire', 'date_action'
+        ]
+        read_only_fields = ['date_action']
+    
+    def get_moderateur_nom(self, obj):
+        try:
+            return f"{obj.moderateur.prenom or ''} {obj.moderateur.nom or ''}".strip() or "Modérateur"
+        except:
+            return "Modérateur"
+
+
+class ProduitModerationSerializer(serializers.ModelSerializer):
+    """Serializer spécialement pour la modération des produits"""
+    
+    # Champs calculés pour les détails
+    nombre_signalements = serializers.SerializerMethodField()
+    score_qualite_moyen = serializers.SerializerMethodField()
+    derniers_signalements = SignalementProduitSerializer(
+        source='signalements', many=True, read_only=True
+    )
+    historique_moderation = HistoriqueModerationSerializer(
+        many=True, read_only=True
+    )
+    
+    # Informations sur le vendeur
+    vendeur_nom = serializers.SerializerMethodField()
+    vendeur_est_verifie = serializers.SerializerMethodField()
+    
+    # Statistiques produit  
+    total_ventes = serializers.SerializerMethodField()
+    nombre_avis = serializers.SerializerMethodField()
+    note_moyenne = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = Produit
+        fields = [
+            'id', 'nom', 'description', 'reference', 'categorie',
+            'est_approuve', 'statut_moderation', 'date_moderation',
+            'moderateur', 'raison_rejet', 'est_visible', 'score_qualite',
+            'derniere_verification',
+            'nombre_signalements', 'score_qualite_moyen',
+            'derniers_signalements', 'historique_moderation',
+            'vendeur_nom', 'vendeur_est_verifie',
+            'total_ventes', 'nombre_avis', 'note_moyenne'
+        ]
+    
+    def get_nombre_signalements(self, obj):
+        try:
+            return obj.signalements.filter(statut='nouveau').count()
+        except:
+            return 0
+    
+    def get_score_qualite_moyen(self, obj):
+        try:
+            evaluations = obj.evaluations_qualite.all()
+            if evaluations:
+                return sum(float(eval.score) for eval in evaluations) / len(evaluations)
+            return 0
+        except:
+            return 0
+    
+    def get_vendeur_nom(self, obj):
+        try:
+            if obj.commercant:
+                return obj.commercant.nom_boutique
+            return "Vendeur inconnu"
+        except:
+            return "Vendeur inconnu"
+    
+    def get_vendeur_est_verifie(self, obj):
+        try:
+            return obj.commercant.est_verifie if obj.commercant else False
+        except:
+            return False
+    
+    def get_total_ventes(self, obj):
+        try:
+            # Compter les détails de commande pour ce produit
+            from .models import DetailCommande
+            return DetailCommande.objects.filter(
+                specification__produit=obj
+            ).aggregate(
+                total=models.Sum('quantite')
+            )['total'] or 0
+        except:
+            return 0
+    
+    def get_nombre_avis(self, obj):
+        try:
+            return obj.avis_set.count()
+        except:
+            return 0
+    
+    def get_note_moyenne(self, obj):
+        try:
+            avis = obj.avis_set.all()
+            if avis:
+                return sum(avis_item.note for avis_item in avis) / len(avis)
+            return 0
+        except:
+            return 0
+
+
+class ModerationActionSerializer(serializers.Serializer):
+    """Serializer pour les actions de modération"""
+    
+    ACTION_CHOICES = [
+        ('approuver', 'Approuver'),
+        ('rejeter', 'Rejeter'),
+        ('suspendre', 'Suspendre'),
+        ('masquer', 'Masquer'),
+        ('demander_modification', 'Demander modification'),
+    ]
+    
+    action = serializers.ChoiceField(choices=ACTION_CHOICES)
+    commentaire = serializers.CharField(required=False, allow_blank=True)
+    raison_rejet = serializers.CharField(required=False, allow_blank=True)
+    
+    def validate(self, data):
+        if data['action'] == 'rejeter' and not data.get('raison_rejet'):
+            raise serializers.ValidationError("La raison du rejet est requise")
+        return data
+
+
+class EvaluationQualiteSerializer(serializers.ModelSerializer):
+    """Serializer pour l'évaluation qualité"""
+    critere_nom = serializers.CharField(source='critere.nom', read_only=True)
+    evaluateur_nom = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = EvaluationQualiteProduit
+        fields = [
+            'id', 'produit', 'critere', 'critere_nom', 'score',
+            'commentaire', 'evaluateur', 'evaluateur_nom', 'date_evaluation'
+        ]
+        read_only_fields = ['evaluateur', 'date_evaluation']
+    
+    def get_evaluateur_nom(self, obj):
+        try:
+            return f"{obj.evaluateur.prenom or ''} {obj.evaluateur.nom or ''}".strip() or "Évaluateur"
+        except:
+            return "Évaluateur"
+
+
+class CritereQualiteSerializer(serializers.ModelSerializer):
+    """Serializer pour les critères de qualité"""
+    
+    class Meta:
+        model = CritereQualiteProduit
+        fields = ['id', 'nom', 'description', 'poids', 'est_actif']
+
+
+# ===== MODIFICATION DU PRODUIT SERIALIZER EXISTANT =====
+
+
+# admin notification 
+class NotificationAdminSerializer(serializers.ModelSerializer):
+    """Serializer étendu pour l'admin"""
+    open_rate = serializers.SerializerMethodField()
+    click_rate = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = Notification
+        fields = '__all__'
+    
+    def get_open_rate(self, obj):
+        if obj.sent_count > 0:
+            return (obj.opened_count / obj.sent_count) * 100
+        return 0
+    
+    def get_click_rate(self, obj):
+        if obj.sent_count > 0:
+            return (obj.clicked_count / obj.sent_count) * 100
+        return 0
+
+
+
+
+
+class CampaignSerializer(serializers.ModelSerializer):
+    """Serializer pour les campagnes marketing"""
+    open_rate = serializers.ReadOnlyField()
+    click_rate = serializers.ReadOnlyField()
+    
+    class Meta:
+        model = Campaign
+        fields = [
+            'id', 'title', 'content', 'type', 'target_users', 'channel', 
+            'status', 'scheduled_date', 'sent_count', 'opened_count', 
+            'clicked_count', 'created_at', 'updated_at', 'open_rate', 'click_rate'
+        ]
+        read_only_fields = ['status', 'sent_count', 'opened_count', 'clicked_count', 
+                          'created_at', 'updated_at']
+
+
+class CampaignCreateSerializer(serializers.ModelSerializer):
+    """Serializer pour créer/modifier une campagne"""
+    
+    class Meta:
+        model = Campaign
+        fields = ['title', 'content', 'type', 'target_users', 'channel', 'scheduled_date']
+    
+    def validate_scheduled_date(self, value):
+        """Handle both string and datetime input for scheduled_date"""
+        if isinstance(value, str):
+            try:
+                # Try parsing with timezone first, then without
+                try:
+                    value = parser.isoparse(value)
+                except ValueError:
+                    value = parser.parse(value)
+            except ValueError as e:
+                raise serializers.ValidationError(
+                    f"Format de date invalide. Utilisez YYYY-MM-DDTHH:MM:SS ou YYYY-MM-DD HH:MM:SS. Erreur: {str(e)}"
+                )
+        
+        if value and value <= timezone.now():
+            raise serializers.ValidationError("La date programmée doit être dans le futur")
+        return value
+class SystemAlertSerializer(serializers.ModelSerializer):
+    """Serializer pour les alertes système"""
+    
+    class Meta:
+        model = SystemAlert
+        fields = [
+            'id', 'title', 'description', 'type', 'severity', 'status',
+            'affected_users', 'created_at', 'resolved_at'
+        ]
+
+class SystemAlertCreateSerializer(serializers.ModelSerializer):
+    """Serializer pour créer/modifier une alerte"""
+    
+    class Meta:
+        model = SystemAlert
+        fields = [
+            'title', 'description', 'type', 'severity', 'affected_users'
+        ]
+
+class NotificationCreateSerializer(serializers.ModelSerializer):
+    """Serializer pour créer une notification"""
+    
+    class Meta:
+        model = Notification
+        fields = ['message', 'produit']
+    
+    def validate_message(self, value):
+        if len(value.strip()) < 5:
+            raise serializers.ValidationError("Le message doit contenir au moins 5 caractères")
+        return value.strip()
