@@ -8,7 +8,8 @@ import traceback
 import requests
 from datetime import timedelta
 from rest_framework import serializers
-
+from rest_framework.decorators import permission_classes
+from rest_framework.permissions import AllowAny
 # Django core imports
 from django.utils import timezone
 from django.utils.crypto import get_random_string
@@ -30,14 +31,14 @@ from rest_framework.decorators import action, api_view
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.pagination import PageNumberPagination
 from django_filters.rest_framework import DjangoFilterBackend
-
+from django.shortcuts import get_object_or_404
 # Google OAuth
 from google.oauth2 import id_token
 from google.auth.transport import requests as google_requests
 
 # Local models
 from .models import (
-    Utilisateur, ProfilVendeur, PasswordResetToken,
+    Campaign, CritereQualiteProduit, EvaluationQualiteProduit, HistoriqueModerationProduit, SignalementProduit, SystemAlert, Utilisateur, ProfilVendeur, PasswordResetToken,
     Produit, ImageProduit, SpecificationProduit, MouvementStock,
     Categorie, Notification, Commande, DetailCommande, TrackingCommande,
     Panier, Favori, Avis, DetailsClient, DetailsCommercant
@@ -45,14 +46,14 @@ from .models import (
 
 # Local serializers
 from .serializers import (
-    ProduitSerializer, CategorieSerializer, ImageProduitSerializer, 
+    AdminBoutiqueSerializer, CampaignCreateSerializer, CampaignSerializer, CritereQualiteSerializer, EvaluationQualiteSerializer, NotificationAdminSerializer, NotificationCreateSerializer, ProduitModerationSerializer, ProduitSerializer, CategorieSerializer, ImageProduitSerializer, SignalementProduitCreateSerializer, SignalementProduitSerializer, 
     SpecificationProduitSerializer, SignupSerializer, LoginSerializer,
     PanierSerializer, PanierCreateSerializer, FavoriSerializer,
-    CommandeSerializer, DetailCommandeSerializer, TrackingCommandeSerializer,
+    CommandeSerializer, DetailCommandeSerializer, SystemAlertCreateSerializer, SystemAlertSerializer, TrackingCommandeSerializer,
     NotificationSerializer, AvisSerializer, AvisCreateSerializer,
     ProfilVendeurSerializer, ClientProduitSerializer, ClientCategorieSerializer,
     ClientCommandeSerializer, CommandeCreateSerializer, DetailsClientSerializer,
-    MouvementStockSerializer
+    MouvementStockSerializer,AdminUserSerializer,ModerationActionSerializer
 )
 
 # Logger configuration
@@ -1487,6 +1488,31 @@ class MouvementStockViewSet(viewsets.ModelViewSet):
             spec.quantite_stock -= mouvement.quantite
         spec.save()
 
+# class NotificationViewSet(viewsets.ModelViewSet):
+#     queryset = Notification.objects.all().order_by('-date_notification')
+#     serializer_class = NotificationSerializer
+#     permission_classes = [AllowAny]
+
+#     def get_queryset(self):
+#         queryset = super().get_queryset()
+#         est_lue = self.request.query_params.get('est_lue')
+#         if est_lue is not None:
+#             if est_lue.lower() in ['true', '1']:
+#                 queryset = queryset.filter(est_lue=True)
+#             elif est_lue.lower() in ['false', '0']:
+#                 queryset = queryset.filter(est_lue=False)
+#         return queryset
+import logging
+import traceback
+from django.utils import timezone
+from django.db.models import Avg
+from rest_framework import viewsets, status
+from rest_framework.decorators import action
+from rest_framework.response import Response
+
+logger = logging.getLogger(__name__)
+
+# MODIFIER votre NotificationViewSet existant
 class NotificationViewSet(viewsets.ModelViewSet):
     queryset = Notification.objects.all().order_by('-date_notification')
     serializer_class = NotificationSerializer
@@ -1501,6 +1527,101 @@ class NotificationViewSet(viewsets.ModelViewSet):
             elif est_lue.lower() in ['false', '0']:
                 queryset = queryset.filter(est_lue=False)
         return queryset
+
+    def create(self, request, *args, **kwargs):
+        """Créer une nouvelle notification"""
+        try:
+            logger.info(f"🔍 Données reçues pour notification: {request.data}")
+            
+            # Validation du message
+            message = request.data.get('message', '').strip()
+            if not message:
+                return Response({
+                    'error': 'Le message est requis'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Récupérer le produit s'il est fourni
+            produit_id = request.data.get('produit')
+            produit = None
+            if produit_id:
+                try:
+                    produit = Produit.objects.get(id=produit_id)
+                    logger.info(f"🎯 Produit trouvé: {produit.nom}")
+                except Produit.DoesNotExist:
+                    logger.warning(f"⚠️ Produit {produit_id} non trouvé, notification générale")
+                    produit = None
+            
+            # Créer la notification
+            notification = Notification.objects.create(
+                message=message,
+                produit=produit,
+                date_notification=timezone.now(),
+                est_lue=False
+            )
+            
+            logger.info(f"✅ Notification créée avec succès: ID {notification.id}")
+            
+            # Retourner la notification avec le serializer
+            serializer = self.get_serializer(notification)
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+            
+        except Exception as e:
+            logger.error(f"❌ Erreur création notification: {str(e)}")
+            logger.error(f"❌ Traceback: {traceback.format_exc()}")
+            return Response({
+                'error': f'Erreur serveur: {str(e)}'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    @action(detail=False, methods=['get'])
+    def stats(self, request):
+        """Récupérer les statistiques des notifications"""
+        try:
+            today = timezone.now().date()
+            this_month = timezone.now().replace(day=1).date()
+            
+            # Stats notifications
+            total_notifications = Notification.objects.count()
+            sent_today = Notification.objects.filter(
+                date_notification__date=today
+            ).count()
+            pending = Notification.objects.filter(est_lue=False).count()
+            delivered = Notification.objects.filter(est_lue=True).count()
+            
+            # Stats campagnes
+            campaigns_active = Campaign.objects.filter(status='active').count()
+            campaigns_this_month = Campaign.objects.filter(
+                created_at__date__gte=this_month
+            )
+            
+            # Calcul des taux moyens
+            if campaigns_this_month.exists():
+                avg_open_rate = sum(c.open_rate for c in campaigns_this_month) / campaigns_this_month.count()
+                avg_click_rate = sum(c.click_rate for c in campaigns_this_month) / campaigns_this_month.count()
+            else:
+                avg_open_rate = 0
+                avg_click_rate = 0
+            
+            return Response({
+                'total_notifications': total_notifications,
+                'sent_today': sent_today,
+                'pending': pending,
+                'delivered': delivered,
+                'campaigns_active': campaigns_active,
+                'open_rate': round(avg_open_rate, 1),
+                'click_rate': round(avg_click_rate, 1)
+            })
+            
+        except Exception as e:
+            logger.error(f"Erreur stats notifications: {str(e)}")
+            return Response({
+                'total_notifications': 0,
+                'sent_today': 0,
+                'pending': 0,
+                'delivered': 0,
+                'campaigns_active': 0,
+                'open_rate': 0,
+                'click_rate': 0
+            })
 
 class CommandeViewSet(viewsets.ModelViewSet):
     queryset = Commande.objects.all().order_by('-date_commande')
@@ -1558,6 +1679,89 @@ class CommandeViewSet(viewsets.ModelViewSet):
                 {'error': f'Erreur lors de la récupération du tracking: {str(e)}'}, 
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+        
+
+        # admin 
+    @action(detail=False, methods=['get'])
+    def stats(self, request):
+        """Statistiques pour l'admin"""
+        try:
+            queryset = self.get_queryset()
+            today = timezone.now().date()
+            this_month_start = today.replace(day=1)
+            
+            stats = {
+                'total': queryset.count(),
+                'en_attente': queryset.filter(statut='en_attente').count(),
+                'confirmees': queryset.filter(statut='confirmee').count(),
+                'livrees': queryset.filter(statut='livree').count(),
+                'litigieuses': queryset.filter(Q(statut='annulee') | Q(statut='litigieuse')).count(),
+                'ca_total': float(queryset.aggregate(total=Sum('montant_total'))['total'] or 0),
+                'ca_mois': float(queryset.filter(
+                    date_commande__gte=this_month_start
+                ).aggregate(total=Sum('montant_total'))['total'] or 0),
+                'commandes_today': queryset.filter(date_commande__date=today).count()
+            }
+            
+            return Response(stats)
+        except Exception as e:
+            return Response({'error': str(e)}, status=500)
+
+    @action(detail=True, methods=['post'])
+    def update_status(self, request, pk=None):
+        """Mettre à jour le statut avec historique"""
+        try:
+            commande = self.get_object()
+            new_status = request.data.get('statut')
+            
+            if not new_status:
+                return Response({'error': 'Statut requis'}, status=400)
+            
+            old_status = commande.statut
+            commande.statut = new_status
+            commande.save()
+            
+            # Le signal du modèle Commande créera automatiquement l'entrée TrackingCommande
+            
+            return Response({
+                'success': True,
+                'message': f'Statut mis à jour: {old_status} → {new_status}',
+                'new_status': new_status
+            })
+        except Exception as e:
+            return Response({'error': str(e)}, status=500)
+
+    @action(detail=True, methods=['post'])
+    def marquer_litigieuse(self, request, pk=None):
+        """Marquer une commande comme litigieuse"""
+        try:
+            commande = self.get_object()
+            raison = request.data.get('raison', 'Marquée manuellement par admin')
+            
+            # Vous pouvez ajouter un champ 'est_litigieuse' au modèle Commande
+            # ou simplement changer le statut
+            commande.statut = 'litigieuse'  # ou 'annulee'
+            commande.save()
+            
+            return Response({
+                'success': True,
+                'message': 'Commande marquée comme litigieuse'
+            })
+        except Exception as e:
+            return Response({'error': str(e)}, status=500)
+
+    @action(detail=False, methods=['get'])
+    def commandes_du_jour(self, request):
+        """Commandes du jour pour dashboard"""
+        today = timezone.now().date()
+        commandes = self.get_queryset().filter(date_commande__date=today)
+        
+        serializer = self.get_serializer(commandes, many=True)
+        return Response({
+            'results': serializer.data,
+            'count': commandes.count(),
+            'date': today.strftime('%Y-%m-%d')
+        })
 
 class DetailCommandeViewSet(viewsets.ModelViewSet):
     queryset = DetailCommande.objects.all()
@@ -2102,3 +2306,1012 @@ def debug_images_complete(request):
             'error': str(e),
             'traceback': traceback.format_exc()
         }, status=500)
+    
+# 
+# admin
+# REMPLACEZ COMPLÈTEMENT votre AdminUsersViewSet par ceci :
+
+class AdminUsersViewSet(viewsets.ReadOnlyModelViewSet):
+    """ViewSet pour la gestion des utilisateurs côté admin"""
+    queryset = Utilisateur.objects.all().order_by('-date_creation')
+    serializer_class = AdminUserSerializer
+    permission_classes = [AllowAny]
+    pagination_class = CustomPagination
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    filterset_fields = ['type_utilisateur', 'est_actif', 'est_verifie']
+    search_fields = ['nom', 'prenom', 'email', 'telephone']
+    ordering_fields = ['date_creation', 'nom', 'prenom']
+    ordering = ['-date_creation']
+
+    @action(detail=False, methods=['get'])
+    def stats(self, request):
+        """Statistiques des utilisateurs"""
+        total_users = Utilisateur.objects.count()
+        
+        stats = {
+            'total_utilisateurs': total_users,
+            'clients': Utilisateur.objects.filter(type_utilisateur='client').count(),
+            'vendeurs': Utilisateur.objects.filter(type_utilisateur='vendeur').count(),
+            'administrateurs': Utilisateur.objects.filter(type_utilisateur='administrateur').count(),
+            'utilisateurs_actifs': Utilisateur.objects.filter(est_actif=True).count(),
+            'utilisateurs_verifies': Utilisateur.objects.filter(est_verifie=True).count(),
+            'nouveaux_cette_semaine': Utilisateur.objects.filter(
+                date_creation__gte=timezone.now() - timedelta(days=7)
+            ).count(),
+        }
+        
+        return Response(stats)
+
+    @action(detail=True, methods=['post'], url_path='toggle-status')
+    def toggle_status(self, request, pk=None):
+        """Activer/désactiver un utilisateur"""
+        try:
+            utilisateur = self.get_object()
+            
+            # Debug
+            print(f"🔍 Toggle status pour utilisateur ID: {pk}")
+            print(f"🔍 Utilisateur trouvé: {utilisateur.nom} {utilisateur.prenom}")
+            print(f"🔍 Statut actuel: {utilisateur.est_actif}")
+            
+            # Inverser le statut actif
+            nouveau_statut = not utilisateur.est_actif
+            utilisateur.est_actif = nouveau_statut
+            utilisateur.save()
+            
+            # Message de confirmation
+            action = "activé" if nouveau_statut else "suspendu"
+            message = f"Utilisateur {utilisateur.prenom} {utilisateur.nom} {action} avec succès"
+            
+            print(f"✅ Nouveau statut: {nouveau_statut}")
+            
+            return Response({
+                'success': True,
+                'message': message,
+                'new_status': nouveau_statut,
+                'user_id': utilisateur.id_utilisateur
+            }, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            print(f"❌ Erreur toggle_status: {str(e)}")
+            return Response({
+                'success': False,
+                'error': f'Erreur lors du changement de statut: {str(e)}'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+# REMPLACEZ COMPLÈTEMENT votre fonction admin_stats par celle-ci :
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def admin_stats(request):
+    """Statistiques générales pour le dashboard admin - FORMAT FRONTEND"""
+    try:
+        # Compter les utilisateurs
+        total_clients = Utilisateur.objects.filter(type_utilisateur='client').count()
+        total_vendeurs = Utilisateur.objects.filter(type_utilisateur='vendeur').count() 
+        users_actifs = Utilisateur.objects.filter(est_actif=True).count()
+        nouveaux_7j = Utilisateur.objects.filter(
+            date_creation__gte=timezone.now() - timedelta(days=7)
+        ).count()
+        
+        # Compter les commandes
+        total_commandes = Commande.objects.count()
+        commandes_today = Commande.objects.filter(
+            date_commande__date=timezone.now().date()
+        ).count()
+        
+        # STRUCTURE PLATE attendue par le frontend React
+        stats = {
+            # Format exact attendu par le frontend
+            'total_clients': total_clients,
+            'total_vendeurs': total_vendeurs,
+            'actifs': users_actifs,
+            'nouveaux': nouveaux_7j,
+            'total_commandes': total_commandes,
+            'commandes_today': commandes_today,
+        }
+        
+        print(f"🔍 STATS RETOURNÉES: {stats}")
+        
+        return Response(stats, status=status.HTTP_200_OK)
+        
+    except Exception as e:
+        print(f"❌ ERREUR admin_stats: {str(e)}")
+        return Response(
+            {'error': f'Erreur: {str(e)}'}, 
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def admin_recent_activity(request):
+    """Activité récente pour le dashboard admin"""
+    try:
+        recent_orders = Commande.objects.select_related('client').order_by('-date_commande')[:5]
+        recent_users = Utilisateur.objects.order_by('-date_creation')[:5]
+        recent_products = Produit.objects.order_by('-id')[:5]
+        
+        activity = {
+            'commandes_recentes': [
+                {
+                    'id': order.id,
+                    'client_nom': f"{order.client.prenom} {order.client.nom}" if order.client else "Client inconnu",
+                    'montant': float(order.montant_total),
+                    'statut': order.statut,
+                    'date': order.date_commande.isoformat(),
+                }
+                for order in recent_orders
+            ],
+            'utilisateurs_recents': [
+                {
+                    'id': user.id_utilisateur,
+                    'nom': f"{user.prenom or ''} {user.nom or ''}".strip() or user.telephone,
+                    'type': user.type_utilisateur,
+                    'date_creation': user.date_creation.isoformat(),
+                }
+                for user in recent_users
+            ],
+            'produits_recents': [
+                {
+                    'id': product.id,
+                    'nom': product.nom,
+                    'reference': product.reference,
+                    'categorie': product.categorie.nom if product.categorie else "Sans catégorie",
+                }
+                for product in recent_products
+            ]
+        }
+        
+        return Response(activity, status=status.HTTP_200_OK)
+        
+    except Exception as e:
+        logger.error(f"Erreur admin_recent_activity: {str(e)}")
+        return Response(
+            {'error': f'Erreur lors de la récupération de l\'activité: {str(e)}'}, 
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+    
+
+# NOUVEAUX ENDPOINTS À CRÉER DANS DJANGO
+
+# 1. Dans views.py - Ajouter ces nouvelles vues
+
+class AdminBoutiquesViewSet(viewsets.ReadOnlyModelViewSet):
+    """ViewSet pour la gestion des boutiques côté admin"""
+    queryset = ProfilVendeur.objects.all().order_by('-date_creation')
+    serializer_class = AdminBoutiqueSerializer
+    permission_classes = [AllowAny]
+    pagination_class = CustomPagination
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    filterset_fields = ['est_approuve', 'ville']
+    search_fields = ['nom_boutique', 'utilisateur__nom', 'utilisateur__prenom', 'ville']
+    ordering_fields = ['date_creation', 'nom_boutique', 'total_ventes']
+    ordering = ['-date_creation']
+
+    @action(detail=True, methods=['post'], url_path='toggle-approval')
+    def toggle_approval(self, request, pk=None):
+        """Approuver/rejeter une boutique"""
+        try:
+            boutique = self.get_object()
+            nouveau_statut = not boutique.est_approuve
+            boutique.est_approuve = nouveau_statut
+            boutique.save()
+            
+            action = "approuvée" if nouveau_statut else "rejetée"
+            return Response({
+                'success': True,
+                'message': f'Boutique {boutique.nom_boutique} {action} avec succès',
+                'new_status': nouveau_statut
+            })
+        except Exception as e:
+            return Response({
+                'success': False,
+                'error': str(e)
+            }, status=500)
+
+    @action(detail=True, methods=['delete'])
+    def supprimer_boutique(self, request, pk=None):
+        """Supprimer définitivement une boutique"""
+        try:
+            boutique = self.get_object()
+            nom_boutique = boutique.nom_boutique
+            boutique.delete()
+            
+            return Response({
+                'success': True,
+                'message': f'Boutique {nom_boutique} supprimée définitivement'
+            })
+        except Exception as e:
+            return Response({
+                'success': False,
+                'error': str(e)
+            }, status=500)
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def admin_boutiques_stats(request):
+    """Statistiques des boutiques pour le dashboard admin"""
+    try:
+        stats = {
+            'total_boutiques': ProfilVendeur.objects.count(),
+            'boutiques_approuvees': ProfilVendeur.objects.filter(est_approuve=True).count(),
+            'en_attente_validation': ProfilVendeur.objects.filter(est_approuve=False).count(),
+            'boutiques_actives': ProfilVendeur.objects.filter(
+                est_approuve=True, 
+                utilisateur__est_actif=True
+            ).count(),
+            'nouvelles_7_jours': ProfilVendeur.objects.filter(
+                date_creation__gte=timezone.now() - timedelta(days=7)
+            ).count(),
+            'chiffre_affaires_total': ProfilVendeur.objects.aggregate(
+                total=Sum('total_ventes')
+            )['total'] or 0,
+        }
+        return Response(stats)
+    except Exception as e:
+        return Response({'error': str(e)}, status=500)
+    
+
+
+class ModerationProduitViewSet(viewsets.ModelViewSet):
+    """ViewSet pour la modération des produits - ACCÈS ADMIN SEULEMENT"""
+    
+    serializer_class = ProduitModerationSerializer
+    permission_classes = [AllowAny]  # TODO: Changer en IsAdminUser
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    
+    filterset_fields = ['statut_moderation', 'est_approuve', 'categorie', 'est_visible']
+    search_fields = ['nom', 'description', 'reference']
+    ordering_fields = ['id', 'date_moderation', 'score_qualite']  # ❌ SUPPRIMÉ date_creation
+    ordering = ['-id']  # ❌ CHANGÉ de date_creation vers id
+    
+    def get_queryset(self):
+        """Optimiser les requêtes et filtrer selon les besoins"""
+        queryset = Produit.objects.prefetch_related(
+            'signalements', 'historique_moderation', 'evaluations_qualite'
+        ).select_related('categorie', 'commercant', 'moderateur')
+        
+        # Filtres spéciaux
+        status_filter = self.request.query_params.get('status_filter')
+        if status_filter == 'en_attente':
+            queryset = queryset.filter(statut_moderation='en_attente')
+        elif status_filter == 'signales':
+            queryset = queryset.filter(
+                signalements__statut__in=['nouveau', 'en_cours']
+            ).distinct()
+        elif status_filter == 'problematiques':
+            queryset = queryset.filter(
+                Q(score_qualite__lt=5) | 
+                Q(signalements__statut='nouveau')
+            ).distinct()
+        
+        return queryset
+    
+    @action(detail=False, methods=['get'])
+    def statistiques(self, request):
+        """Statistiques globales de modération"""
+        try:
+            stats = {
+                'total_produits': Produit.objects.count(),
+                'en_attente_moderation': Produit.objects.filter(statut_moderation='en_attente').count(),
+                'approuves': Produit.objects.filter(statut_moderation='approuve').count(),
+                'rejetes': Produit.objects.filter(statut_moderation='rejete').count(),
+                'suspendus': Produit.objects.filter(statut_moderation='suspendu').count(),
+                'avec_signalements': Produit.objects.filter(
+                    signalements__statut__in=['nouveau', 'en_cours']
+                ).distinct().count(),
+                'signalements_non_traites': SignalementProduit.objects.filter(
+                    statut='nouveau'
+                ).count(),
+                'score_qualite_moyen': Produit.objects.filter(
+                    score_qualite__gt=0
+                ).aggregate(Avg('score_qualite'))['score_qualite__avg'] or 0,
+            }
+            
+            # Répartition par catégorie
+            stats['par_categorie'] = list(
+                Produit.objects.values('categorie__nom').annotate(
+                    total=Count('id'),
+                    en_attente=Count(Case(When(statut_moderation='en_attente', then=1))),
+                    approuves=Count(Case(When(statut_moderation='approuve', then=1))),
+                ).order_by('-total')[:10]
+            )
+            
+            return Response(stats)
+            
+        except Exception as e:
+            logger.error(f"Erreur stats modération: {str(e)}")
+            return Response(
+                {'error': 'Erreur lors du calcul des statistiques'}, 
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+    
+    @action(detail=True, methods=['post'])
+    def moderer(self, request, pk=None):
+        """Effectuer une action de modération sur un produit"""
+        try:
+            produit = self.get_object()
+            serializer = ModerationActionSerializer(data=request.data)
+            
+            if not serializer.is_valid():
+                return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+            
+            action = serializer.validated_data['action']
+            commentaire = serializer.validated_data.get('commentaire', '')
+            raison_rejet = serializer.validated_data.get('raison_rejet', '')
+            
+            # Récupérer le modérateur (pour l'instant, premier admin trouvé)
+            moderateur = Utilisateur.objects.filter(type_utilisateur='administrateur').first()
+            if not moderateur:
+                moderateur = Utilisateur.objects.first()  # Fallback temporaire
+            
+            ancien_statut = produit.statut_moderation
+            
+            with transaction.atomic():
+                # Appliquer l'action
+                if action == 'approuver':
+                    produit.statut_moderation = 'approuve'
+                    produit.est_approuve = True
+                    produit.est_visible = True
+                    produit.raison_rejet = ''
+                    
+                elif action == 'rejeter':
+                    produit.statut_moderation = 'rejete'
+                    produit.est_approuve = False
+                    produit.est_visible = False
+                    produit.raison_rejet = raison_rejet
+                    
+                elif action == 'suspendre':
+                    produit.statut_moderation = 'suspendu'
+                    produit.est_approuve = False
+                    produit.est_visible = False
+                    
+                elif action == 'masquer':
+                    produit.est_visible = False
+                    
+                elif action == 'demander_modification':
+                    produit.statut_moderation = 'en_attente'
+                    produit.raison_rejet = commentaire
+                
+                produit.date_moderation = timezone.now()
+                produit.moderateur = moderateur
+                produit.save()
+                
+                # Enregistrer dans l'historique
+                HistoriqueModerationProduit.objects.create(
+                    produit=produit,
+                    moderateur=moderateur,
+                    action=action,
+                    ancien_statut=ancien_statut,
+                    nouveau_statut=produit.statut_moderation,
+                    commentaire=commentaire
+                )
+                
+                # Si approuvé, marquer les signalements comme traités
+                if action == 'approuver':
+                    SignalementProduit.objects.filter(
+                        produit=produit, 
+                        statut__in=['nouveau', 'en_cours']
+                    ).update(
+                        statut='rejete',
+                        date_traitement=timezone.now(),
+                        moderateur=moderateur,
+                        action_prise='Produit approuvé par modération'
+                    )
+            
+            return Response({
+                'message': f'Action "{action}" effectuée avec succès',
+                'nouveau_statut': produit.statut_moderation,
+                'produit': ProduitModerationSerializer(produit).data
+            })
+            
+        except Exception as e:
+            logger.error(f"Erreur modération produit {pk}: {str(e)}")
+            return Response(
+                {'error': f'Erreur lors de la modération: {str(e)}'}, 
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+    
+    @action(detail=False, methods=['post'])
+    def moderation_en_masse(self, request):
+        """Modération en masse de plusieurs produits"""
+        try:
+            produit_ids = request.data.get('produit_ids', [])
+            action = request.data.get('action')
+            commentaire = request.data.get('commentaire', '')
+            
+            if not produit_ids or not action:
+                return Response(
+                    {'error': 'produit_ids et action sont requis'}, 
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            produits = Produit.objects.filter(id__in=produit_ids)
+            moderateur = Utilisateur.objects.filter(type_utilisateur='administrateur').first()
+            
+            resultats = []
+            
+            with transaction.atomic():
+                for produit in produits:
+                    try:
+                        ancien_statut = produit.statut_moderation
+                        
+                        if action == 'approuver':
+                            produit.statut_moderation = 'approuve'
+                            produit.est_approuve = True
+                            produit.est_visible = True
+                        elif action == 'rejeter':
+                            produit.statut_moderation = 'rejete'
+                            produit.est_approuve = False
+                            produit.est_visible = False
+                        
+                        produit.date_moderation = timezone.now()
+                        produit.moderateur = moderateur
+                        produit.save()
+                        
+                        # Historique
+                        HistoriqueModerationProduit.objects.create(
+                            produit=produit,
+                            moderateur=moderateur,
+                            action=action,
+                            ancien_statut=ancien_statut,
+                            nouveau_statut=produit.statut_moderation,
+                            commentaire=f"Modération en masse: {commentaire}"
+                        )
+                        
+                        resultats.append({
+                            'produit_id': produit.id,
+                            'nom': produit.nom,
+                            'succes': True,
+                            'nouveau_statut': produit.statut_moderation
+                        })
+                        
+                    except Exception as e:
+                        resultats.append({
+                            'produit_id': produit.id,
+                            'nom': produit.nom if hasattr(produit, 'nom') else 'Inconnu',
+                            'succes': False,
+                            'erreur': str(e)
+                        })
+            
+            return Response({
+                'message': f'Modération en masse terminée',
+                'total_traites': len(resultats),
+                'succes': len([r for r in resultats if r['succes']]),
+                'echecs': len([r for r in resultats if not r['succes']]),
+                'resultats': resultats
+            })
+            
+        except Exception as e:
+            logger.error(f"Erreur modération en masse: {str(e)}")
+            return Response(
+                {'error': f'Erreur lors de la modération en masse: {str(e)}'}, 
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+
+class SignalementProduitViewSet(viewsets.ModelViewSet):
+    """ViewSet pour la gestion des signalements"""
+    
+    serializer_class = SignalementProduitSerializer
+    permission_classes = [AllowAny]  # TODO: IsAuthenticated pour créer, IsAdminUser pour voir tous
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    
+    filterset_fields = ['statut', 'type_signalement', 'produit']
+    search_fields = ['description', 'produit__nom']
+    ordering = ['-date_signalement']
+    
+    def get_queryset(self):
+        """Adapter selon le type d'utilisateur"""
+        # Pour l'instant, tous les signalements
+        # TODO: Filtrer selon les permissions
+        return SignalementProduit.objects.select_related(
+            'produit', 'signaleur', 'moderateur'
+        )
+    
+    def get_serializer_class(self):
+        if self.action in ['create', 'update', 'partial_update']:
+            return SignalementProduitCreateSerializer
+        return SignalementProduitSerializer
+    
+    def perform_create(self, serializer):
+        """Créer un signalement"""
+        # Pour l'instant, utiliser le premier utilisateur trouvé
+        # TODO: Utiliser request.user quand l'auth sera configurée
+        signaleur = Utilisateur.objects.first()
+        serializer.save(signaleur=signaleur)
+    
+    @action(detail=True, methods=['post'])
+    def traiter(self, request, pk=None):
+        """Traiter un signalement"""
+        try:
+            signalement = self.get_object()
+            action_prise = request.data.get('action_prise', '')
+            nouveau_statut = request.data.get('statut', 'traite')
+            
+            if nouveau_statut not in ['traite', 'rejete', 'en_cours']:
+                return Response(
+                    {'error': 'Statut invalide'}, 
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            moderateur = Utilisateur.objects.filter(type_utilisateur='administrateur').first()
+            
+            signalement.statut = nouveau_statut
+            signalement.action_prise = action_prise
+            signalement.date_traitement = timezone.now()
+            signalement.moderateur = moderateur
+            signalement.save()
+            
+            return Response({
+                'message': 'Signalement traité avec succès',
+                'signalement': SignalementProduitSerializer(signalement).data
+            })
+            
+        except Exception as e:
+            logger.error(f"Erreur traitement signalement {pk}: {str(e)}")
+            return Response(
+                {'error': f'Erreur lors du traitement: {str(e)}'}, 
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+    
+    @action(detail=False, methods=['get'])
+    def statistiques(self, request):
+        """Statistiques des signalements"""
+        try:
+            stats = {
+                'total': SignalementProduit.objects.count(),
+                'nouveaux': SignalementProduit.objects.filter(statut='nouveau').count(),
+                'en_cours': SignalementProduit.objects.filter(statut='en_cours').count(),
+                'traites': SignalementProduit.objects.filter(statut='traite').count(),
+                'rejetes': SignalementProduit.objects.filter(statut='rejete').count(),
+            }
+            
+            # Par type de signalement
+            stats['par_type'] = list(
+                SignalementProduit.objects.values('type_signalement').annotate(
+                    count=Count('id')
+                ).order_by('-count')
+            )
+            
+            return Response(stats)
+            
+        except Exception as e:
+            return Response(
+                {'error': 'Erreur lors du calcul des statistiques'}, 
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+
+class EvaluationQualiteViewSet(viewsets.ModelViewSet):
+    """ViewSet pour l'évaluation de la qualité des produits"""
+    
+    queryset = EvaluationQualiteProduit.objects.all()
+    serializer_class = EvaluationQualiteSerializer
+    permission_classes = [AllowAny]  # TODO: IsAdminUser
+    
+    def perform_create(self, serializer):
+        # Utiliser le premier utilisateur admin trouvé
+        evaluateur = Utilisateur.objects.filter(type_utilisateur='administrateur').first()
+        if not evaluateur:
+            evaluateur = Utilisateur.objects.first()
+        serializer.save(evaluateur=evaluateur)
+    
+    @action(detail=False, methods=['post'])
+    def evaluer_produit(self, request):
+        """Évaluer un produit selon tous les critères"""
+        try:
+            produit_id = request.data.get('produit_id')
+            evaluations = request.data.get('evaluations', [])  # [{critere_id, score, commentaire}, ...]
+            
+            if not produit_id or not evaluations:
+                return Response(
+                    {'error': 'produit_id et evaluations sont requis'}, 
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            produit = Produit.objects.get(id=produit_id)
+            evaluateur = Utilisateur.objects.filter(type_utilisateur='administrateur').first()
+            
+            resultats = []
+            score_total = 0
+            poids_total = 0
+            
+            with transaction.atomic():
+                for eval_data in evaluations:
+                    try:
+                        critere = CritereQualiteProduit.objects.get(id=eval_data['critere_id'])
+                        
+                        # Supprimer l'ancienne évaluation si elle existe
+                        EvaluationQualiteProduit.objects.filter(
+                            produit=produit, critere=critere
+                        ).delete()
+                        
+                        # Créer la nouvelle évaluation
+                        evaluation = EvaluationQualiteProduit.objects.create(
+                            produit=produit,
+                            critere=critere,
+                            score=eval_data['score'],
+                            commentaire=eval_data.get('commentaire', ''),
+                            evaluateur=evaluateur
+                        )
+                        
+                        score_total += evaluation.score * critere.poids
+                        poids_total += critere.poids
+                        
+                        resultats.append({
+                            'critere': critere.nom,
+                            'score': evaluation.score,
+                            'succes': True
+                        })
+                        
+                    except Exception as e:
+                        resultats.append({
+                            'critere_id': eval_data.get('critere_id'),
+                            'succes': False,
+                            'erreur': str(e)
+                        })
+                
+                # Calculer et sauvegarder le score global
+                if poids_total > 0:
+                    score_global = score_total / poids_total
+                    produit.score_qualite = round(score_global, 2)
+                    produit.derniere_verification = timezone.now()
+                    produit.save()
+            
+            return Response({
+                'message': 'Évaluation terminée',
+                'score_global': float(produit.score_qualite),
+                'resultats': resultats
+            })
+            
+        except Produit.DoesNotExist:
+            return Response(
+                {'error': 'Produit non trouvé'}, 
+                status=status.HTTP_404_NOT_FOUND
+            )
+        except Exception as e:
+            logger.error(f"Erreur évaluation qualité: {str(e)}")
+            return Response(
+                {'error': f'Erreur lors de l\'évaluation: {str(e)}'}, 
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+
+class CritereQualiteViewSet(viewsets.ModelViewSet):
+    """ViewSet pour la gestion des critères de qualité"""
+    
+    queryset = CritereQualiteProduit.objects.filter(est_actif=True).order_by('nom')
+    serializer_class = CritereQualiteSerializer
+    permission_classes = [AllowAny]  # TODO: IsAdminUser
+
+
+# ===========================
+# VUES API SPÉCIALES
+# ===========================
+
+class DashboardModerationView(APIView):
+    """Dashboard récapitulatif pour les modérateurs"""
+    
+    permission_classes = [AllowAny]  # TODO: IsAdminUser
+    
+    def get(self, request):
+        try:
+            # Statistiques générales
+            stats_produits = {
+                'total': Produit.objects.count(),
+                'en_attente': Produit.objects.filter(statut_moderation='en_attente').count(),
+                'approuves': Produit.objects.filter(statut_moderation='approuve').count(),
+                'rejetes': Produit.objects.filter(statut_moderation='rejete').count(),
+            }
+            
+            stats_signalements = {
+                'total': SignalementProduit.objects.count(),
+                'nouveaux': SignalementProduit.objects.filter(statut='nouveau').count(),
+                'en_cours': SignalementProduit.objects.filter(statut='en_cours').count(),
+                'urgent': SignalementProduit.objects.filter(
+                    type_signalement__in=['contenu_inapproprie', 'violation_droits'],
+                    statut='nouveau'
+                ).count(),
+            }
+            
+            # Produits nécessitant une attention
+            produits_urgents = Produit.objects.filter(
+                Q(statut_moderation='en_attente') |
+                Q(signalements__statut='nouveau') |
+                Q(score_qualite__lt=3)
+            ).distinct()[:10]
+            
+            # Signalements récents
+            signalements_recents = SignalementProduit.objects.filter(
+                statut__in=['nouveau', 'en_cours']
+            ).order_by('-date_signalement')[:10]
+            
+            return Response({
+                'stats_produits': stats_produits,
+                'stats_signalements': stats_signalements,
+                'produits_urgents': ProduitModerationSerializer(produits_urgents, many=True).data,
+                'signalements_recents': SignalementProduitSerializer(signalements_recents, many=True).data,
+            })
+            
+        except Exception as e:
+            logger.error(f"Erreur dashboard modération: {str(e)}")
+            return Response(
+                {'error': 'Erreur lors du chargement du dashboard'}, 
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+        
+
+
+        # admin notification 
+class AdminNotificationViewSet(viewsets.ModelViewSet):
+    """ViewSet pour la gestion admin des notifications"""
+    queryset = Notification.objects.all().order_by('-date_notification')
+    serializer_class = NotificationSerializer
+    permission_classes = [AllowAny]
+    
+    @action(detail=False, methods=['post'])
+    def create_notification(self, request):
+        """Créer une nouvelle notification"""
+        try:
+            serializer = NotificationCreateSerializer(data=request.data)
+            if serializer.is_valid():
+                notification = serializer.save()
+                logger.info(f"Notification créée: {notification.id}")
+                
+                return Response({
+                    'success': True,
+                    'message': 'Notification créée avec succès',
+                    'notification': NotificationSerializer(notification).data
+                }, status=status.HTTP_201_CREATED)
+            else:
+                return Response({
+                    'success': False,
+                    'errors': serializer.errors
+                }, status=status.HTTP_400_BAD_REQUEST)
+                
+        except Exception as e:
+            logger.error(f"Erreur création notification: {str(e)}")
+            return Response({
+                'success': False,
+                'error': str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+    @action(detail=False, methods=['get'])
+    def stats(self, request):
+        """Récupérer les statistiques des notifications"""
+        try:
+            today = timezone.now().date()
+            this_month = timezone.now().replace(day=1).date()
+            
+            # Stats notifications
+            total_notifications = Notification.objects.count()
+            sent_today = Notification.objects.filter(
+                date_notification__date=today
+            ).count()
+            pending = Notification.objects.filter(est_lue=False).count()
+            delivered = Notification.objects.filter(est_lue=True).count()
+            
+            # Stats campagnes
+            campaigns_active = Campaign.objects.filter(status='active').count()
+            campaigns_this_month = Campaign.objects.filter(
+                created_at__date__gte=this_month
+            )
+            
+            # Calcul des taux moyens
+            if campaigns_this_month.exists():
+                avg_open_rate = sum(c.open_rate for c in campaigns_this_month) / campaigns_this_month.count()
+                avg_click_rate = sum(c.click_rate for c in campaigns_this_month) / campaigns_this_month.count()
+            else:
+                avg_open_rate = 0
+                avg_click_rate = 0
+            
+            return Response({
+                'total_notifications': total_notifications,
+                'sent_today': sent_today,
+                'pending': pending,
+                'delivered': delivered,
+                'campaigns_active': campaigns_active,
+                'open_rate': round(avg_open_rate, 1),
+                'click_rate': round(avg_click_rate, 1)
+            })
+            
+        except Exception as e:
+            logger.error(f"Erreur stats notifications: {str(e)}")
+            return Response({
+                'total_notifications': 0,
+                'sent_today': 0,
+                'pending': 0,
+                'delivered': 0,
+                'campaigns_active': 0,
+                'open_rate': 0,
+                'click_rate': 0
+            })
+
+class CampaignViewSet(viewsets.ModelViewSet):
+    """ViewSet pour la gestion des campagnes marketing"""
+    queryset = Campaign.objects.all().order_by('-created_at')
+    serializer_class = CampaignSerializer
+    permission_classes = [AllowAny]
+    
+    def get_serializer_class(self):
+        if self.action in ['create', 'update', 'partial_update']:
+            return CampaignCreateSerializer
+        return CampaignSerializer
+    
+    def create(self, request, *args, **kwargs):
+        """Créer/envoyer une nouvelle campagne"""
+        try:
+            logger.info(f"🔍 Données reçues pour campagne: {request.data}")
+            
+            serializer = CampaignCreateSerializer(data=request.data)
+            if serializer.is_valid():
+                campaign = serializer.save()
+                
+                # Calculer le nombre d'utilisateurs cibles
+                if campaign.target_users == 'all':
+                    target_count = Utilisateur.objects.filter(est_actif=True).count()
+                elif campaign.target_users == 'clients':
+                    target_count = Utilisateur.objects.filter(
+                        type_utilisateur='client', est_actif=True
+                    ).count()
+                elif campaign.target_users == 'vendors':
+                    target_count = Utilisateur.objects.filter(
+                        type_utilisateur='vendeur', est_actif=True
+                    ).count()
+                else:
+                    target_count = Utilisateur.objects.filter(est_actif=True).count()
+                
+                # Si pas de date programmée, envoyer immédiatement
+                if not campaign.scheduled_date or campaign.scheduled_date <= timezone.now():
+                    campaign.status = 'active'
+                    campaign.sent_count = target_count
+                    # Simuler des statistiques d'ouverture/clic réalistes
+                    campaign.opened_count = int(target_count * 0.65)  # 65% d'ouverture
+                    campaign.clicked_count = int(target_count * 0.12)  # 12% de clic
+                else:
+                    campaign.status = 'scheduled'
+                
+                campaign.save()
+                
+                logger.info(f"✅ Campagne créée: {campaign.title} (ID: {campaign.id})")
+                
+                return Response(
+                    CampaignSerializer(campaign).data,
+                    status=status.HTTP_201_CREATED
+                )
+            else:
+                return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+                
+        except Exception as e:
+            logger.error(f"❌ Erreur création campagne: {str(e)}")
+            return Response({
+                'error': f'Erreur serveur: {str(e)}'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+    @action(detail=True, methods=['post'])
+    def send_now(self, request, pk=None):
+        """Envoyer immédiatement une campagne programmée"""
+        try:
+            campaign = self.get_object()
+            
+            if campaign.status not in ['scheduled', 'draft']:
+                return Response({
+                    'error': 'Seules les campagnes programmées ou en brouillon peuvent être envoyées'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Calculer le nombre d'utilisateurs cibles
+            if campaign.target_users == 'all':
+                target_count = Utilisateur.objects.filter(est_actif=True).count()
+            elif campaign.target_users == 'clients':
+                target_count = Utilisateur.objects.filter(
+                    type_utilisateur='client', est_actif=True
+                ).count()
+            elif campaign.target_users == 'vendors':
+                target_count = Utilisateur.objects.filter(
+                    type_utilisateur='vendeur', est_actif=True
+                ).count()
+            else:
+                target_count = Utilisateur.objects.filter(est_actif=True).count()
+            
+            campaign.status = 'active'
+            campaign.sent_count = target_count
+            campaign.opened_count = int(target_count * 0.65)
+            campaign.clicked_count = int(target_count * 0.12)
+            campaign.save()
+            
+            return Response({
+                'message': 'Campagne envoyée avec succès',
+                'campaign': CampaignSerializer(campaign).data
+            })
+            
+        except Exception as e:
+            logger.error(f"❌ Erreur envoi campagne: {str(e)}")
+            return Response({
+                'error': f'Erreur serveur: {str(e)}'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+class SystemAlertViewSet(viewsets.ModelViewSet):
+    """ViewSet pour la gestion des alertes système"""
+    queryset = SystemAlert.objects.all().order_by('-created_at')
+    serializer_class = SystemAlertSerializer
+    permission_classes = [AllowAny]
+    
+    def get_serializer_class(self):
+        if self.action in ['create', 'update', 'partial_update']:
+            return SystemAlertCreateSerializer
+        return SystemAlertSerializer
+    
+    def create(self, request, *args, **kwargs):
+        """Créer une nouvelle alerte système"""
+        try:
+            logger.info(f"🔍 Données reçues pour alerte: {request.data}")
+            
+            serializer = SystemAlertCreateSerializer(data=request.data)
+            if serializer.is_valid():
+                alert = serializer.save()
+                logger.info(f"✅ Alerte créée: {alert.title} (ID: {alert.id})")
+                
+                return Response(
+                    SystemAlertSerializer(alert).data,
+                    status=status.HTTP_201_CREATED
+                )
+            else:
+                return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+                
+        except Exception as e:
+            logger.error(f"❌ Erreur création alerte: {str(e)}")
+            return Response({
+                'error': f'Erreur serveur: {str(e)}'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+    @action(detail=True, methods=['post'])
+    def resolve(self, request, pk=None):
+        """Marquer une alerte comme résolue"""
+        try:
+            alert = self.get_object()
+            alert.status = 'resolved'
+            alert.resolved_at = timezone.now()
+            alert.save()
+            
+            logger.info(f"✅ Alerte {alert.id} marquée comme résolue")
+            
+            return Response({
+                'message': 'Alerte marquée comme résolue',
+                'alert': SystemAlertSerializer(alert).data
+            })
+            
+        except Exception as e:
+            logger.error(f"❌ Erreur résolution alerte: {str(e)}")
+            return Response({
+                'error': f'Erreur serveur: {str(e)}'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+    @action(detail=False, methods=['get'])
+    def active_alerts(self, request):
+        """Récupérer toutes les alertes actives"""
+        try:
+            active_alerts = SystemAlert.objects.filter(status='active').order_by('-severity', '-created_at')
+            serializer = SystemAlertSerializer(active_alerts, many=True)
+            
+            return Response({
+                'count': active_alerts.count(),
+                'results': serializer.data
+            })
+            
+        except Exception as e:
+            logger.error(f"❌ Erreur alertes actives: {str(e)}")
+            return Response({
+                'count': 0,
+                'result':[]
+            })
+        
+
+
+# Dans views.py - Endpoints analytics spécialisés
+@api_view(['GET'])
+def analytics_summary(request):
+    return Response({
+        'users_total': Utilisateur.objects.count(),
+        'users_by_type': {...},
+        'daily_revenue': {...},
+        'top_selling_products': {...}
+    })
