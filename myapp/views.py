@@ -210,13 +210,23 @@ class ResetPasswordView(APIView):
 
         return Response({"message": "Mot de passe réinitialisé avec succès"}, status=200)
 
+#  VUE GOOGLE CORRIGÉE AVEC DEBUGGING
 class GoogleLoginView(APIView):
     permission_classes = [AllowAny]
 
     def post(self, request):
         token = request.data.get("token")
+        type_utilisateur = request.data.get("type_utilisateur")  #  RÉCUPÉRER LE TYPE
+        
+        #  DEBUGGING
+        print(f" DEBUG Google - Données reçues: {request.data}")
+        print(f" DEBUG Google - Type utilisateur reçu: '{type_utilisateur}'")
+        
         if not token:
             return Response({"error": "Token requis"}, status=status.HTTP_400_BAD_REQUEST)
+            
+        if not type_utilisateur:
+            return Response({"error": "Type d'utilisateur requis"}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
             idinfo = id_token.verify_oauth2_token(
@@ -234,6 +244,9 @@ class GoogleLoginView(APIView):
 
             with transaction.atomic():
                 telephone_temporaire = f"google_{get_random_string(length=10)}"
+                
+                print(f"🐛 DEBUG Google - Tentative création avec type: '{type_utilisateur}'")
+                
                 utilisateur, created = Utilisateur.objects.get_or_create(
                     email=email,
                     defaults={
@@ -241,9 +254,18 @@ class GoogleLoginView(APIView):
                         "prenom": prenom,
                         "telephone": telephone_temporaire,
                         "mot_de_passe": make_password(google_sub),
-                        "type_utilisateur": "vendeur",
+                        "type_utilisateur": type_utilisateur,  #  UTILISER LE TYPE ENVOYÉ
                     },
                 )
+                
+                print(f" DEBUG Google - Utilisateur créé: {created}")
+                print(f" DEBUG Google - Type final utilisateur: '{utilisateur.type_utilisateur}'")
+                
+                #  Si l'utilisateur existe déjà, NE PAS changer le type
+                if not created:
+                    print(f" DEBUG Google - Utilisateur existant, type actuel: '{utilisateur.type_utilisateur}'")
+                    # On ne change PAS le type s'il existe déjà
+                    pass
 
             request.session['user_id'] = utilisateur.id_utilisateur
 
@@ -253,6 +275,7 @@ class GoogleLoginView(APIView):
                     "email": utilisateur.email,
                     "nom": utilisateur.nom,
                     "prenom": utilisateur.prenom,
+                    "type_utilisateur": utilisateur.type_utilisateur,  #  RETOURNER LE TYPE
                 }
             }, status=status.HTTP_200_OK)
 
@@ -260,48 +283,106 @@ class GoogleLoginView(APIView):
             logger.error(f"Erreur Google token: {e}")
             return Response({"error": f"Token invalide : {str(e)}"}, status=status.HTTP_400_BAD_REQUEST)
 
+
+#  VUE FACEBOOK CORRIGÉE AVEC DEBUGGING
 class FacebookLoginView(APIView):
     permission_classes = [AllowAny]
 
     def post(self, request):
         access_token = request.data.get("access_token")
         email = request.data.get("email")
+        type_utilisateur = request.data.get("type_utilisateur")  # 🔧 RÉCUPÉRER LE TYPE
+
+        #  DEBUGGING
+        print(f" DEBUG Facebook - Données reçues: {request.data}")
+        print(f" DEBUG Facebook - Type utilisateur reçu: '{type_utilisateur}'")
 
         if not access_token or not email:
             return Response({"error": "Token et email requis"}, status=status.HTTP_400_BAD_REQUEST)
+            
+        if not type_utilisateur:
+            return Response({"error": "Type d'utilisateur requis"}, status=status.HTTP_400_BAD_REQUEST)
 
-        url = f'https://graph.facebook.com/me?access_token={access_token}&fields=email,name'
-        response = requests.get(url)
-        if response.status_code != 200:
-            return Response({"error": "Token Facebook invalide"}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            # Vérification du token Facebook
+            url = f'https://graph.facebook.com/me?access_token={access_token}&fields=email,name'
+            response = requests.get(url)
+            if response.status_code != 200:
+                return Response({"error": "Token Facebook invalide"}, status=status.HTTP_400_BAD_REQUEST)
 
-        facebook_data = response.json()
-        name = facebook_data.get("name")
-        if not name:
-            return Response({"error": "Nom non trouvé dans le token"}, status=status.HTTP_400_BAD_REQUEST)
+            facebook_data = response.json()
+            name = facebook_data.get("name", "")
+            facebook_email = facebook_data.get("email")
 
-        with transaction.atomic():
-            utilisateur, created = Utilisateur.objects.get_or_create(email=email)
-            utilisateur.nom = name.split(" ")[-1]
-            utilisateur.prenom = " ".join(name.split(" ")[:-1])
-            if not utilisateur.telephone:
-                utilisateur.telephone = ""
-            utilisateur.mot_de_passe = make_password(email)
-            if not utilisateur.type_utilisateur:
-                utilisateur.type_utilisateur = "vendeur"
-            utilisateur.save()
+            # Vérifier que l'email correspond
+            if facebook_email != email:
+                return Response({"error": "Email ne correspond pas au token"}, status=status.HTTP_400_BAD_REQUEST)
 
-        return Response({
-            "message": "Connexion Facebook réussie",
-            "created": created,
-            "user": {
-                "email": utilisateur.email,
-                "nom": utilisateur.nom,
-                "prenom": utilisateur.prenom,
-                "telephone": utilisateur.telephone,
-                "type_utilisateur": utilisateur.type_utilisateur,
-            }
-        }, status=status.HTTP_200_OK)
+            if not name:
+                return Response({"error": "Nom non trouvé dans le token"}, status=status.HTTP_400_BAD_REQUEST)
+
+            # Parser le nom
+            name_parts = name.split(" ")
+            if len(name_parts) >= 2:
+                prenom = " ".join(name_parts[:-1])
+                nom = name_parts[-1]
+            else:
+                prenom = name
+                nom = ""
+
+            with transaction.atomic():
+                # Génération du téléphone temporaire
+                telephone_temporaire = f"facebook_{get_random_string(length=10)}"
+                
+                print(f" DEBUG Facebook - Tentative création avec type: '{type_utilisateur}'")
+                
+                utilisateur, created = Utilisateur.objects.get_or_create(
+                    email=email,
+                    defaults={
+                        "nom": nom,
+                        "prenom": prenom,
+                        "telephone": telephone_temporaire,
+                        "mot_de_passe": make_password(email),
+                        "type_utilisateur": type_utilisateur,  #  UTILISER LE TYPE ENVOYÉ
+                    },
+                )
+
+                print(f" DEBUG Facebook - Utilisateur créé: {created}")
+                print(f" DEBUG Facebook - Type final utilisateur: '{utilisateur.type_utilisateur}'")
+
+                # Si l'utilisateur existe déjà, mettre à jour les infos si nécessaires
+                if not created:
+                    print(f" DEBUG Facebook - Utilisateur existant, type actuel: '{utilisateur.type_utilisateur}'")
+                    # Mettre à jour le nom/prénom si vides
+                    if not utilisateur.nom:
+                        utilisateur.nom = nom
+                    if not utilisateur.prenom:
+                        utilisateur.prenom = prenom
+                    # Si pas de téléphone, en générer un
+                    if not utilisateur.telephone or utilisateur.telephone == "":
+                        utilisateur.telephone = telephone_temporaire
+                    # NE PAS changer le type s'il existe déjà
+                    # On garde le type original de l'utilisateur
+                    utilisateur.save()
+
+            # Définir la session
+            request.session['user_id'] = utilisateur.id_utilisateur
+
+            return Response({
+                "message": "Connexion Facebook réussie",
+                "created": created,
+                "user": {
+                    "email": utilisateur.email,
+                    "nom": utilisateur.nom,
+                    "prenom": utilisateur.prenom,
+                    "telephone": utilisateur.telephone,
+                    "type_utilisateur": utilisateur.type_utilisateur,  # 🔧 RETOURNER LE TYPE
+                }
+            }, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            logger.error(f"Erreur Facebook login: {e}")
+            return Response({"error": f"Erreur lors de la connexion Facebook: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 @csrf_exempt
@@ -1200,6 +1281,77 @@ class ProduitViewSet(viewsets.ModelViewSet):
         specs = produit.specificationproduit_set.all().order_by('-est_defaut')
         serializer = SpecificationProduitSerializer(specs, many=True)
         return Response(serializer.data)
+    
+    # Dans views.py - Ajouter cette méthode à la classe ProduitViewSet
+
+    @action(detail=False, methods=['get'])
+    def stats(self, request):
+        """Statistiques des produits pour le dashboard admin"""
+        try:
+            # Obtenir le vendeur connecté pour filtrer ses produits
+            vendor, error = get_current_vendor(request)
+            if error:
+                # Si pas de vendeur connecté, retourner stats globales (pour admin)
+                queryset = Produit.objects.all()
+            else:
+                # Filtrer par vendeur connecté
+                queryset = Produit.objects.filter(vendeur=vendor)
+            
+            # Calculer les statistiques
+            total_produits = queryset.count()
+            
+            # Stats par stock
+            en_stock = 0
+            stock_faible = 0
+            rupture = 0
+            
+            for produit in queryset:
+                stock_total = sum(
+                    spec.quantite_stock 
+                    for spec in produit.specificationproduit_set.all()
+                )
+                
+                if stock_total == 0:
+                    rupture += 1
+                elif stock_total <= 5:
+                    stock_faible += 1
+                else:
+                    en_stock += 1
+            
+            # Stats par statut de modération
+            en_attente = queryset.filter(statut_moderation='en_attente').count()
+            
+            # Produits avec images
+            avec_images = queryset.filter(imageproduit__isnull=False).distinct().count()
+            
+            # Produits signalés
+            signales = queryset.filter(
+                signalements__statut__in=['nouveau', 'en_cours']
+            ).distinct().count()
+            
+            stats = {
+                'total': total_produits,
+                'en_stock': en_stock,
+                'stock_faible': stock_faible,
+                'rupture': rupture,
+                'avec_images': avec_images,
+                'en_attente': en_attente,
+                'signales': signales,
+            }
+            
+            return Response(stats, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            logger.error(f"Erreur calcul stats produits: {str(e)}")
+            return Response({
+                'total': 0,
+                'en_stock': 0,
+                'stock_faible': 0,
+                'rupture': 0,
+                'avec_images': 0,
+                'en_attente': 0,
+                'signales': 0,
+            }, status=status.HTTP_200_OK)
 
     def perform_create(self, serializer):
         # Temporaire : associer au premier commerçant trouvé
