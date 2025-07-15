@@ -51,3 +51,8 @@ INFO 2025-07-13 21:09:58,535 views 31496 14196 Produit trouvé: Chaussures Adidas
 INFO 2025-07-13 21:09:58,539 views 31496 14196 Client trouvé/créé: Client Temporaire (ID: 1)
 INFO 2025-07-13 21:09:58,544 views 31496 14196 Spécification trouvée: test (ID: 8, Stock: 14)
 INFO 2025-07-13 21:09:58,556 views 31496 14196 Nouvel article créé: 3
+INFO 2025-07-14 19:31:27,024 views 20508 7888 Produit trouvé: yyy
+INFO 2025-07-14 19:31:27,035 views 20508 7888 Client temporaire créé: Client Temporaire (ID: 1)
+INFO 2025-07-14 19:31:27,036 views 20508 7888 Client trouvé/créé: Client Temporaire (ID: 1)
+INFO 2025-07-14 19:31:27,038 views 20508 7888 Spécification trouvée: yy (ID: 8, Stock: 4)
+INFO 2025-07-14 19:31:27,045 views 20508 7888 Nouvel article créé: 1

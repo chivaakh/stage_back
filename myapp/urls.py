@@ -15,6 +15,7 @@ from .views import (
     # Functions
     upload_image, debug_products, debug_images_complete, vendor_products_debug,
 )
+from myapp import views
 
 
 
@@ -54,7 +55,7 @@ urlpatterns = [
     path('api/vendeur-info/', VendeurInfoView.as_view(), name='vendeur_info'),
     path('upload-image/', upload_image, name='upload-image'),
     path('api/logout/', logout_view, name='logout'),
-
+    path('api/client-info/', views.ClientInfoView.as_view(), name='client-info'),
 
     # Utility URLs
     path('upload-image/', upload_image, name='upload-image'),

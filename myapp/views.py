@@ -420,6 +420,86 @@ class VendeurInfoView(APIView):
         except Utilisateur.DoesNotExist:
             return Response({"error": "Utilisateur non trouvé."}, status=401)
 
+
+class ClientInfoView(APIView):
+    """Vue pour récupérer les informations du client connecté"""
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        user_id = request.session.get('user_id')
+        if not user_id:
+            return Response({"error": "Non connecté."}, status=401)
+
+        try:
+            utilisateur = Utilisateur.objects.get(id_utilisateur=user_id)
+
+            response_data = {
+                "id": utilisateur.id_utilisateur,
+                "type_utilisateur": utilisateur.type_utilisateur,
+                "nom": utilisateur.nom,
+                "prenom": utilisateur.prenom,
+                "email": utilisateur.email,
+                "telephone": utilisateur.telephone,
+                "date_creation": utilisateur.date_creation,
+                "est_verifie": utilisateur.est_verifie,
+                "initiales": self.get_initiales(utilisateur.prenom, utilisateur.nom),
+                "nom_complet": self.get_nom_complet(utilisateur.prenom, utilisateur.nom)
+            }
+
+            # Si c'est un client, ajouter les détails client
+            if utilisateur.type_utilisateur == 'client':
+                try:
+                    details_client = DetailsClient.objects.get(utilisateur=utilisateur)
+                    response_data["details_client"] = {
+                        "adresse": details_client.adresse,
+                        "ville": details_client.ville,
+                        "code_postal": details_client.code_postal,
+                        "pays": details_client.pays,
+                        "photo_profil": details_client.photo_profil.url_image if details_client.photo_profil else None
+                    }
+                except DetailsClient.DoesNotExist:
+                    response_data["details_client"] = None
+
+            return Response(response_data, status=200)
+
+        except Utilisateur.DoesNotExist:
+            return Response({"error": "Utilisateur non trouvé."}, status=401)
+
+    def get_initiales(self, prenom, nom):
+        """Générer les initiales à partir du prénom et nom"""
+        initiales = ""
+        
+        if prenom and len(prenom.strip()) > 0:
+            initiales += prenom.strip()[0].upper()
+        
+        if nom and len(nom.strip()) > 0:
+            initiales += nom.strip()[0].upper()
+        
+        # Si pas assez d'initiales, compléter avec des lettres par défaut
+        if len(initiales) == 0:
+            return "CL"  # Client par défaut
+        elif len(initiales) == 1:
+            initiales += "L"  # Ajouter L pour Client
+            
+        return initiales
+
+    def get_nom_complet(self, prenom, nom):
+        """Générer le nom complet"""
+        parties = []
+        
+        if prenom and prenom.strip():
+            parties.append(prenom.strip())
+        
+        if nom and nom.strip():
+            parties.append(nom.strip())
+        
+        if parties:
+            return " ".join(parties)
+        else:
+            return "Client Ishrili"
+
+
+
 # ===========================
 # VIEWSETS E-COMMERCE CLIENT
 # ===========================
